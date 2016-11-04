@@ -9,11 +9,9 @@
     "log_level": "debug",
     "log_file": ""
   },
-  "redshift_conf": {
-    "host": "test-metrics.cgvqep5r03fj.us-west-2.redshift.amazonaws.com",
-    "port": 5439
-  },
   "metrics_conf": {
+    "host": "test-metrics.cgvqep5r03fj.us-west-2.redshift.amazonaws.com",
+    "port": 5439,
     "db": "test_metrics",
     "user": "ingester",
     "pass": "ThisIsATest1",
@@ -21,18 +19,20 @@
     "batch_size": 1000,
     "batch_timeout": 10,
     "buffer_size": 1000,
-    "pool_size": 2,
+    "pool_size": 1,
     "subject": "metrics.>"
   },
   "log_line_conf": {
-    "db": "test_logs",
+    "host": "test-metrics.cgvqep5r03fj.us-west-2.redshift.amazonaws.com",
+    "port": 5439,
+    "db": "test_lines",
     "user": "ingester",
     "pass": "ThisIsATest1",
     "connection_timeout": 100,
     "batch_size": 1000,
-    "batch_timeout": 10,
+    "batch_timeout": 2,
     "buffer_size": 1000,
-    "pool_size": 2,
+    "pool_size": 1,
     "subject": "logs.>"
   }
 }

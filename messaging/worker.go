@@ -45,7 +45,7 @@ func (bs *BufferedSubscriber) Subscribe(nc *nats.Conn, log *logrus.Entry) error 
 func BuildBatchingWorkerPool(shared chan *nats.Msg, poolSize, batchSize, timeoutSec int, log *logrus.Entry, h BatchHandler) (*sync.WaitGroup, error) {
 	wg := new(sync.WaitGroup)
 
-	for i := poolSize; i >= 0; i-- {
+	for i := poolSize; i > 0; i-- {
 		l := log.WithField("worker_id", i)
 		wg.Add(1)
 		go func() {
@@ -86,6 +86,7 @@ func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h Bat
 	}
 
 	go func() {
+		ticker := time.Tick(timeout)
 		for {
 			select {
 			case m := <-incoming:
@@ -97,7 +98,7 @@ func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h Bat
 					go wrapped(out, log.WithField("reason", "size"))
 				}
 				batchLock.Unlock()
-			case <-time.After(timeout):
+			case <-ticker:
 				batchLock.Lock()
 				if len(currentBatch) > 0 {
 					out := currentBatch

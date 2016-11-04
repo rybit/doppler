@@ -12,6 +12,8 @@ import (
 	"github.com/nats-io/nats"
 	"github.com/pkg/errors"
 
+	"reflect"
+
 	"github.com/rybit/doppler/messaging"
 )
 
@@ -29,8 +31,8 @@ const (
 	compound sortkey (name, timestamp)
 	`
 
-	createDims = `
-	create table if not exists dims (
+	createMetricDims = `
+	create table if not exists metric_dims (
 		id bigint identity primary key,
 		key varchar(max) not null,
 		value varchar(max) not null,
@@ -38,66 +40,23 @@ const (
 	)
 	sortkey (metric_id)
 	`
-	metricInsert = `insert into metrics (id, name, timestamp, value, type, created_at) values `
-	dimInsert    = `insert into dims (key, value, metric_id) values `
+	insertMetric    = `insert into metrics (id, name, timestamp, value, type, created_at) values `
+	insertMetricDim = `insert into metric_dims (key, value, metric_id) values `
 )
 
-func createMetricsTables(db *sql.DB) error {
+func CreateMetricsTables(db *sql.DB) error {
 	if _, err := db.Exec(createMetrics); err != nil {
 		return errors.Wrap(err, "creating metrics table")
 	}
 
-	if _, err := db.Exec(createDims); err != nil {
+	if _, err := db.Exec(createMetricDims); err != nil {
 		return errors.Wrap(err, "creating dims table")
 	}
 
 	return nil
 }
 
-func ProcessMetrics(host string, port int, mconf *IngestionConfig, nc *nats.Conn, log *logrus.Entry) error {
-	log.WithFields(logrus.Fields{
-		"db":   mconf.DB,
-		"host": host,
-		"port": port,
-	}).Info("Connecting to Redshift")
-	db, err := connectToRedshift(
-		host,
-		port,
-		mconf.DB,
-		mconf.User,
-		mconf.Pass,
-		mconf.Timeout,
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := createMetricsTables(db); err != nil {
-		return err
-	}
-
-	// build worker pool
-	shared := make(chan *nats.Msg, mconf.BufferSize)
-	bufSub := &messaging.BufferedSubscriber{
-		Subject:  mconf.Subject,
-		Group:    mconf.Group,
-		Messages: shared,
-	}
-	wg, err := messaging.BuildBatchingWorkerPool(shared, mconf.PoolSize, mconf.BatchSize, mconf.BatchTimeout, log, getMetricBatchHandler(db))
-	if err != nil {
-		return err
-	}
-
-	if err := bufSub.Subscribe(nc, log); err != nil {
-		return err
-	}
-	defer bufSub.Unsubscribe()
-
-	wg.Wait()
-	return nil
-}
-
-func getMetricBatchHandler(db *sql.DB) messaging.BatchHandler {
+func BuildMetricsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 	return func(batch []*nats.Msg, log *logrus.Entry) {
 		metricValues := []string{}
 		dimValues := []string{}
@@ -120,21 +79,11 @@ func getMetricBatchHandler(db *sql.DB) messaging.BatchHandler {
 				metricValues = append(metricValues, tail)
 				if m.Dims != nil {
 					for k, v := range *m.Dims {
-						asStr := ""
-						switch t := v.(type) {
-						case int, int32, int64:
-							asStr = fmt.Sprintf("%d", v)
-						case string:
-							asStr = v.(string)
-						case float32, float64:
-							asStr = fmt.Sprintf("%f", v)
-						case bool:
-							asStr = fmt.Sprintf("%t", v)
-						default:
-							log.Warnf("Unsupported type for dim: %s, type: %v, value: %v", k, t, v)
-							continue
+						if asStr, ok := asString(v); ok {
+							dimValues = append(dimValues, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
+						} else {
+							log.Warnf("Unsupported type for dim: %s, type: %s, value: %v", k, reflect.TypeOf(v).String(), v)
 						}
-						dimValues = append(dimValues, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
 					}
 				}
 			} else {
@@ -154,12 +103,12 @@ func getMetricBatchHandler(db *sql.DB) messaging.BatchHandler {
 			return
 		}
 
-		if err := insert(tx, metricInsert, metricValues, log.WithField("phase", "metrics")); err != nil {
+		if err := insert(tx, insertMetric, metricValues, verbose, log.WithField("phase", "metrics")); err != nil {
 			tx.Rollback()
 			return
 		}
 
-		if err := insert(tx, dimInsert, dimValues, log.WithField("phase", "dims")); err != nil {
+		if err := insert(tx, insertMetricDim, dimValues, verbose, log.WithField("phase", "dims")); err != nil {
 			tx.Rollback()
 			return
 		}
