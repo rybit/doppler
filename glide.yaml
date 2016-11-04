@@ -1,0 +1,13 @@
+package: github.com/rybit/doppler
+import:
+- package: github.com/Sirupsen/logrus
+  version: v0.11.0
+- package: github.com/lib/pq
+- package: github.com/nats-io/nats
+  version: v1.2.2
+- package: github.com/pborman/uuid
+  version: v1.0
+- package: github.com/pkg/errors
+  version: v0.8.0
+- package: github.com/spf13/cobra
+- package: github.com/spf13/viper
