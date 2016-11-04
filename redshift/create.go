@@ -17,6 +17,7 @@ const (
 
 		created_at timestamptz default current_timestamp
 	)
+	compound sortkey (name, timestamp)
 	`
 
 	createDims = `
@@ -26,6 +27,7 @@ const (
 		value varchar(max) not null,
 		metric_id varchar(40) references metrics(id)
 	)
+	sortkey (metric_id)
 	`
 )
 

@@ -60,5 +60,13 @@ func validate(config *Config) (*Config, error) {
 		return nil, errors.New("Must provide at least one worker")
 	}
 
+	if config.RedshiftConf.BatchSize == 0 {
+		return nil, errors.New("Must provide a batch size for redshift messages")
+	}
+
+	if config.RedshiftConf.BatchTimeout == 0 {
+		return nil, errors.New("Must provide a timeout for batches")
+	}
+
 	return config, nil
 }

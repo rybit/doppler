@@ -83,7 +83,11 @@ func ingest(cmd *cobra.Command, args []string) {
 	log.Info("Shutting down ingestion")
 }
 
+// This will start up a pool of consumers that will consume from nats directly.
+// They will each then batch write to redshift
 func getMsgProcessor(config *conf.Config, db *sql.DB, log *logrus.Entry) (nats.MsgHandler, *sync.WaitGroup) {
+	to := time.Duration(config.RedshiftConf.BatchTimeout) * time.Second
+
 	wg := new(sync.WaitGroup)
 	toRedshift := make(chan *nats.Msg, config.NatsConf.BufferSize)
 
@@ -91,20 +95,20 @@ func getMsgProcessor(config *conf.Config, db *sql.DB, log *logrus.Entry) (nats.M
 	for i := int64(0); i < config.NatsConf.PoolSize; i++ {
 		l := log.WithField("client", i)
 		l.Infof("Starting consumer %d", i)
+		incoming, off := redshift.StartBatcher(db, to, config.RedshiftConf.BatchSize, l)
 		wg.Add(1)
+
 		go func() {
-			defer wg.Done()
+			defer func() {
+				wg.Done()
+				off <- true
+			}()
 
 			for m := range toRedshift {
 				payload := new(messaging.InboundMetric)
 				if err := json.Unmarshal(m.Data, payload); err == nil {
-					start := time.Now()
-					err := redshift.Insert(db, payload, log)
-					if err != nil {
-						log.WithError(err).Warn("Failed to perform insert")
-					} else {
-						log.Debugf("Finished insert in %s", time.Since(start).String())
-					}
+					//go redshift.Insert(db, payload, log)
+					incoming <- payload
 				} else {
 					log.WithError(err).Warn("Failed to parse incoming message")
 				}

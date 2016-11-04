@@ -10,16 +10,16 @@ import (
 	_ "github.com/lib/pq" // Postgres driver.
 	"github.com/pkg/errors"
 
+	"sync"
+
+	"sync/atomic"
+
 	"github.com/pborman/uuid"
 	"github.com/rybit/doppler/messaging"
 )
 
 const (
-	metricInsert = `
-	insert into metrics
-		(id, name, timestamp, value, type)
-	values ('%s', '%s', '%s', %d, '%s')
-	`
+	metricInsert = `insert into metrics (id, name, timestamp, value, type, created_at) values `
 
 	// this is meant to be all but the necessary '(?, ?, ?)'
 	dimInsert = `INSERT into dims (key, value, metric_id) VALUES `
@@ -32,6 +32,9 @@ type RedshiftConfig struct {
 	User    *string `mapstructure:"user"`
 	Pass    *string `mapstructure:"pass"`
 	Timeout int     `mapstructure:"connect_timeout"`
+
+	BatchTimeout int `mapstructure:"batch_timeout"`
+	BatchSize    int `mapstructure:"batch_size"`
 }
 
 func id() string {
@@ -54,48 +57,141 @@ func ConnectToRedshift(config *RedshiftConfig, log *logrus.Entry) (*sql.DB, erro
 	return sql.Open("postgres", source)
 }
 
-func Insert(db *sql.DB, metric *messaging.InboundMetric, log *logrus.Entry) error {
-	var err error
+func StartBatcher(db *sql.DB, timeout time.Duration, batchSize int, log *logrus.Entry) (chan<- (*messaging.InboundMetric), chan<- (bool)) {
+	batchLock := new(sync.Mutex)
+	currentBatch := []*messaging.InboundMetric{}
 
-	// we have to generate our own IDs b/c redshift doesn't support
-	// a 'returning' clause.
-	id := id()
+	incoming := make(chan *messaging.InboundMetric, batchSize)
+	shutdown := make(chan bool)
+	go func() {
+		for {
+			select {
+
+			case m := <-incoming:
+				batchLock.Lock()
+				currentBatch = append(currentBatch, m)
+				if len(currentBatch) > batchSize {
+					out := currentBatch
+					currentBatch = []*messaging.InboundMetric{}
+					go sendBatch(db, out, log.WithField("reason", "size"))
+				}
+				batchLock.Unlock()
+			case <-time.After(timeout):
+				batchLock.Lock()
+				if len(currentBatch) > 0 {
+					out := currentBatch
+					currentBatch = []*messaging.InboundMetric{}
+					go sendBatch(db, out, log.WithField("reason", "timeout"))
+				}
+				batchLock.Unlock()
+
+			case <-shutdown:
+				log.Debug("Got shutdown signal")
+				close(shutdown)
+				return
+			}
+		}
+		log.Debug("Shutdown batcher")
+	}()
+
+	return incoming, shutdown
+}
+
+var batchCounter int32
+
+func sendBatch(db *sql.DB, batch []*messaging.InboundMetric, log *logrus.Entry) {
+	atomic.AddInt32(&batchCounter, 1)
+	start := time.Now()
+	log = log.WithField("batch_id", start.UnixNano())
+	defer func() {
+		inflight := atomic.AddInt32(&batchCounter, -1)
+		dur := time.Since(start)
+		log.WithFields(logrus.Fields{
+			"dur":              dur.Nanoseconds(),
+			"inflight_batches": inflight,
+		}).Infof("Finished processing batch in %s", dur.String())
+	}()
+
+	log.Info("Starting to process batch")
+	metricValues := []string{}
+	dimValues := []string{}
+
+	for _, m := range batch {
+		id := id()
+		tail := fmt.Sprintf("('%s', '%s', '%s', %d, '%s', default)", id, m.Name, m.Timestamp.Format(time.RFC822Z), m.Value, m.Type)
+		metricValues = append(metricValues, tail)
+		if m.Dims != nil {
+			for k, v := range *m.Dims {
+				asStr := ""
+				switch t := v.(type) {
+				case int, int32, int64:
+					asStr = fmt.Sprintf("%d", v)
+				case string:
+					asStr = v.(string)
+				case float32, float64:
+					asStr = fmt.Sprintf("%f", v)
+				default:
+					log.Warnf("Unsupported type for dim %s: %v : %v", k, t, v)
+					continue
+				}
+				dimValues = append(dimValues, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
+			}
+		}
+	}
+
+	log.WithFields(logrus.Fields{
+		"batch_size":    len(batch),
+		"metrics_count": len(metricValues),
+		"dims_count":    len(dimValues),
+	}).Info("Storing batch")
 
 	tx, err := db.Begin()
 	if err != nil {
-		return errors.Wrap(err, "failed to start transaction")
+		log.WithError(err).Warn("Failed to create transaction")
+		return
 	}
-	stmt := fmt.Sprintf(metricInsert, id, metric.Name, metric.Timestamp.Format(time.RFC822Z), metric.Value, metric.Type)
-	log.Debugf("inserting metric: %s", stmt)
-	if _, err = tx.Exec(stmt); err != nil {
+
+	if err := insert(tx, metricInsert, metricValues, log.WithField("phase", "metrics")); err != nil {
 		tx.Rollback()
-		return errors.Wrap(err, "Inserting metric")
+		return
+	}
+	if err := insert(tx, dimInsert, dimValues, log.WithField("phase", "dims")); err != nil {
+		tx.Rollback()
+		return
 	}
 
-	if metric.Dims != nil {
-		args := []string{}
-		for k, v := range *metric.Dims {
-			asStr := ""
-			switch t := v.(type) {
-			case int, int32, int64:
-				asStr = fmt.Sprintf("%d", v)
-			case string:
-				asStr = v.(string)
-			case float32, float64:
-				asStr = fmt.Sprintf("%f", v)
-			default:
-				log.Warnf("Unsupported type for dim %s: %v : %v", k, t, v)
-				continue
-			}
-			args = append(args, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
-		}
-		stmt = dimInsert + strings.Join(args, ",")
-		log.Debugf("inserting dims: %s", stmt)
-		if _, err := tx.Exec(stmt); err != nil {
-			tx.Rollback()
-			return errors.Wrapf(err, "saving dims")
-		}
+	if err := tx.Commit(); err != nil {
+		log.WithError(err).Warn("Failed to commit transaction")
+	}
+}
+
+func insert(tx *sql.Tx, root string, entries []string, log *logrus.Entry) error {
+	start := time.Now()
+	rows := int64(0)
+	defer func() {
+		dur := time.Since(start)
+		log.WithFields(logrus.Fields{
+			"affected_rows": rows,
+			"dur":           dur.Nanoseconds(),
+		}).Debugf("Stored %d rows in %s", rows, dur.String())
+	}()
+
+	stmt := root + strings.Join(entries, ",")
+	res, err := tx.Exec(stmt)
+	if err != nil {
+		log.WithError(err).Warn("Failed to save values in redshift")
+		return err
 	}
 
-	return tx.Commit()
+	rows, err = res.RowsAffected()
+	if err != nil {
+		log.WithError(err).Warn("Failed to get the rows affected")
+		return err
+	}
+	if rows != int64(len(entries)) {
+		log.Warnf("Didn't save all the metrics %d vs %d expected", rows, len(entries))
+		return errors.New("Incorrect amount saved")
+	}
+
+	return nil
 }
