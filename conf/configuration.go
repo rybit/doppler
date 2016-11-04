@@ -14,11 +14,11 @@ import (
 )
 
 type Config struct {
-	ReportSec int64 `mapstructure:"report_sec"`
-
-	RedshiftConf redshift.RedshiftConfig `mapstructure:"redshift_conf"`
-	NatsConf     messaging.NatsConfig    `mapstructure:"nats_conf"`
-	LogConf      LoggingConfig           `mapstructure:"log_conf"`
+	RedshiftConf redshift.RedshiftConfig   `mapstructure:"redshift_conf"`
+	NatsConf     messaging.NatsConfig      `mapstructure:"nats_conf"`
+	LogConf      LoggingConfig             `mapstructure:"log_conf"`
+	MetricsConf  *redshift.IngestionConfig `mapstructure:"metrics_conf"`
+	LogLineConf  *redshift.IngestionConfig `mapstructure:"log_line_conf"`
 }
 
 // LoadConfig loads the config from a file if specified, otherwise from the environment
@@ -56,16 +56,35 @@ func LoadConfig(cmd *cobra.Command) (*Config, error) {
 }
 
 func validate(config *Config) (*Config, error) {
-	if config.NatsConf.PoolSize == 0 {
-		return nil, errors.New("Must provide at least one worker")
+	if config.MetricsConf != nil {
+		if config.MetricsConf.BatchSize == 0 {
+			return nil, errors.New("Must provide a batch size for redshift messages")
+		}
+
+		if config.MetricsConf.PoolSize == 0 {
+			return nil, errors.New("Must provide at least one worker")
+		}
+
+		if config.MetricsConf.BatchTimeout == 0 {
+			return nil, errors.New("Must provide a timeout for batches")
+		}
+	}
+	if config.LogLineConf != nil {
+		if config.LogLineConf.BatchSize == 0 {
+			return nil, errors.New("Must provide a batch size for redshift messages")
+		}
+
+		if config.LogLineConf.PoolSize == 0 {
+			return nil, errors.New("Must provide at least one worker")
+		}
+
+		if config.LogLineConf.BatchTimeout == 0 {
+			return nil, errors.New("Must provide a timeout for batches")
+		}
 	}
 
-	if config.RedshiftConf.BatchSize == 0 {
-		return nil, errors.New("Must provide a batch size for redshift messages")
-	}
-
-	if config.RedshiftConf.BatchTimeout == 0 {
-		return nil, errors.New("Must provide a timeout for batches")
+	if config.MetricsConf == nil && config.LogLineConf == nil {
+		return nil, errors.New("Must provide a log line or metrics config")
 	}
 
 	return config, nil

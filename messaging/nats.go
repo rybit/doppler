@@ -16,9 +16,6 @@ type NatsConfig struct {
 	KeyFile  string   `mapstructure:"key_file"`
 	CertFile string   `mapstructure:"cert_file"`
 	Servers  []string `mapstructure:"servers"`
-
-	PoolSize   int64 `mapstructure:"pool_size"`
-	BufferSize int64 `mapstructure:"buffer_size"`
 }
 
 // ServerString will build the proper string for nats connect
