@@ -134,8 +134,10 @@ func sendBatch(db *sql.DB, batch []*messaging.InboundMetric, log *logrus.Entry) 
 					asStr = v.(string)
 				case float32, float64:
 					asStr = fmt.Sprintf("%f", v)
+				case bool:
+					asStr = fmt.Sprintf("%t", v)
 				default:
-					log.Warnf("Unsupported type for dim %s: %v : %v", k, t, v)
+					log.Warnf("Unsupported type for dim: %s, type: %v, value: %v", k, t, v)
 					continue
 				}
 				dimValues = append(dimValues, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
@@ -159,9 +161,12 @@ func sendBatch(db *sql.DB, batch []*messaging.InboundMetric, log *logrus.Entry) 
 		tx.Rollback()
 		return
 	}
-	if err := insert(tx, dimInsert, dimValues, log.WithField("phase", "dims")); err != nil {
-		tx.Rollback()
-		return
+
+	if len(dimValues) > 0 {
+		if err := insert(tx, dimInsert, dimValues, log.WithField("phase", "dims")); err != nil {
+			tx.Rollback()
+			return
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
