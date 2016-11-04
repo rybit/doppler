@@ -35,11 +35,15 @@ type RedshiftConfig struct {
 
 	BatchTimeout int `mapstructure:"batch_timeout"`
 	BatchSize    int `mapstructure:"batch_size"`
+
+	LogQueries bool `mapstructure:"log_queries"`
 }
 
 func id() string {
 	return uuid.NewRandom().String()
 }
+
+var LogQueries = false
 
 func ConnectToRedshift(config *RedshiftConfig, log *logrus.Entry) (*sql.DB, error) {
 	source := fmt.Sprintf("host=%s port=%d dbname=%s connect_timeout=%d", config.Host, config.Port, config.DB, config.Timeout)
@@ -177,6 +181,9 @@ func insert(tx *sql.Tx, root string, entries []string, log *logrus.Entry) error 
 	}()
 
 	stmt := root + strings.Join(entries, ",")
+	if LogQueries {
+		log.WithField("query", true).Info(stmt)
+	}
 	res, err := tx.Exec(stmt)
 	if err != nil {
 		log.WithError(err).Warn("Failed to save values in redshift")

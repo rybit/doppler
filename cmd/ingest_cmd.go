@@ -60,6 +60,8 @@ func ingest(cmd *cobra.Command, args []string) {
 		log.WithError(err).Fatal("Failed to create the necessary tables")
 	}
 
+	redshift.LogQueries = config.RedshiftConf.LogQueries
+
 	writer, wg := getMsgProcessor(config, db, log)
 
 	var sub *nats.Subscription
