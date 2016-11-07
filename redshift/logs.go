@@ -78,7 +78,7 @@ func BuildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 					switch k {
 					case "msg", "@msg":
 						if val, ok := v.(string); ok {
-							msg = val
+							msg = sanitize(val)
 						}
 					case "time", "@timestamp", "@time", "timestamp", "_timestamp":
 						if val, ok := v.(string); ok {
@@ -148,4 +148,8 @@ func BuildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 			log.WithError(err).Warn("Failed to commit transaction")
 		}
 	}
+}
+
+func sanitize(in string) string {
+	return strings.Replace(in, "'", "", -1)
 }
