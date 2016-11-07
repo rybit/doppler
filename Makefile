@@ -8,6 +8,9 @@ all: deps test build ## Run the tests and build the binary.
 build: ## Build the binary.
 	go build -ldflags "-X github.com/rybit/doppler/cmd.Version=`git rev-parse HEAD`"
 
+build_linux: ## Build the binary.
+	GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/rybit/doppler/cmd.Version=`git rev-parse HEAD`" -o doppler_linux_amd64
+
 deps: ## Install dependencies.
 	go get -u github.com/Masterminds/glide && glide install
 

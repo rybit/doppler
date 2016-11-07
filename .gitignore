@@ -7,3 +7,4 @@ db/*
 
 vendor/
 doppler
+*.tar.gz
