@@ -13,6 +13,7 @@ tag=$(git tag --points-at $(git rev-parse HEAD))
 make build_linux
 [ $? -eq 0 ] || { echo "failed to build"; exit 1; }
 
-tar -czf doppler_linux_amd64_$tag.tar.gz doppler_linux_amd64 example.config.json
-rm doppler_linux_amd64
+mv doppler_linux_amd64 doppler_$tag
+tar -czf doppler_linux_amd64_$tag.tar.gz doppler_$tag example.config.json
+rm doppler_$tag
 
