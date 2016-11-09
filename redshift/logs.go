@@ -47,6 +47,8 @@ const (
 
 	insertLine    = `insert into lines (id, source, msg, timestamp, level, hostname, created_at) values`
 	insertLineDim = `insert into line_dims (key, value, line_id) values `
+
+	MaxLineLength = 65536
 )
 
 func CreateLogsTables(db *sql.DB) error {
@@ -78,7 +80,16 @@ func BuildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 					switch k {
 					case "msg", "@msg":
 						if val, ok := v.(string); ok {
-							msg = sanitize(val)
+							val = strings.TrimSpace(val)
+							val = sanitize(val)
+							if len(val) > MaxLineLength {
+								log.Debugf("Skipping line because it is too long: '%s'", val)
+								continue
+							}
+							if len(val) == 0 {
+								continue
+							}
+							msg = val
 						}
 					case "time", "@timestamp", "@time", "timestamp", "_timestamp":
 						if val, ok := v.(string); ok {
@@ -123,9 +134,9 @@ func BuildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 		}
 
 		log.WithFields(logrus.Fields{
-			"batch_size":    len(batch),
-			"metrics_count": len(lineValues),
-			"dims_count":    len(dimValues),
+			"batch_size":  len(batch),
+			"lines_count": len(lineValues),
+			"dims_count":  len(dimValues),
 		}).Info("Finished parsing batch - Storing batch")
 
 		tx, err := db.Begin()

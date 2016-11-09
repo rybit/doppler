@@ -57,7 +57,7 @@ func insert(tx *sql.Tx, root string, entries []string, verbose bool, log *logrus
 		log.WithFields(logrus.Fields{
 			"affected_rows": rows,
 			"dur":           dur.Nanoseconds(),
-		}).Debugf("Stored %d rows in %s", rows, dur.String())
+		}).Infof("Stored %d rows in %s", rows, dur.String())
 	}()
 
 	stmt := root + strings.Join(entries, ",")
