@@ -51,6 +51,10 @@ const (
 	MaxLineLength = 65536
 )
 
+func ProcessLines(nc *nats.Conn, log *logrus.Entry, config *IngestionConfig) error {
+	return process(config, nc, log, CreateLogsTables, BuildLogsHandler)
+}
+
 func CreateLogsTables(db *sql.DB) error {
 	if _, err := db.Exec(createLines); err != nil {
 		return errors.Wrap(err, "creating metrics table")

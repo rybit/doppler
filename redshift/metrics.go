@@ -56,6 +56,10 @@ func CreateMetricsTables(db *sql.DB) error {
 	return nil
 }
 
+func ProcessMetrics(nc *nats.Conn, log *logrus.Entry, config *IngestionConfig) error {
+	return process(config, nc, log, CreateMetricsTables, BuildMetricsHandler)
+}
+
 func BuildMetricsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 	return func(batch []*nats.Msg, log *logrus.Entry) {
 		metricValues := []string{}

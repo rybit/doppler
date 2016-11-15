@@ -10,30 +10,16 @@ import (
 	"errors"
 
 	"github.com/rybit/doppler/messaging"
+	"github.com/rybit/doppler/redshift"
+	"github.com/rybit/doppler/scalyr"
 )
 
 type Config struct {
-	NatsConf    messaging.NatsConfig `mapstructure:"nats_conf"`
-	LogConf     LoggingConfig        `mapstructure:"log_conf"`
-	MetricsConf *IngestionConfig     `mapstructure:"metrics_conf"`
-	LogLineConf *IngestionConfig     `mapstructure:"log_line_conf"`
-}
-
-type IngestionConfig struct {
-	Host         string  `mapstructure:"host"`
-	Port         int     `mapstructure:"port"`
-	DB           string  `mapstructure:"db"`
-	User         *string `mapstructure:"user"`
-	Pass         *string `mapstructure:"pass"`
-	Timeout      int     `mapstructure:"connect_timeout"`
-	LogQueries   bool    `mapstructure:"log_queries"`
-	BatchTimeout int     `mapstructure:"batch_timeout"`
-	BatchSize    int     `mapstructure:"batch_size"`
-
-	Subject    string `mapstructure:"subject"`
-	Group      string `mapstructure:"group"`
-	PoolSize   int    `mapstructure:"pool_size"`
-	BufferSize int    `mapstructure:"buffer_size"`
+	NatsConf    messaging.NatsConfig      `mapstructure:"nats_conf"`
+	LogConf     LoggingConfig             `mapstructure:"log_conf"`
+	MetricsConf *redshift.IngestionConfig `mapstructure:"metrics_conf"`
+	LogLineConf *redshift.IngestionConfig `mapstructure:"log_line_conf"`
+	ScalyrConf  *scalyr.ScalyrConfig      `mapstructure:"scalyr_conf"`
 }
 
 // LoadConfig loads the config from a file if specified, otherwise from the environment
