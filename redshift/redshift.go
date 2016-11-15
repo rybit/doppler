@@ -49,19 +49,6 @@ func ConnectToRedshift(host string, port int, db string, user, pass *string, tim
 	return sql.Open("postgres", source)
 }
 
-func asString(face interface{}) (string, bool) {
-	switch face.(type) {
-	case int, int32, int64:
-		return fmt.Sprintf("%d", face), true
-	case string:
-		return face.(string), true
-	case float32, float64:
-		return fmt.Sprintf("%f", face), true
-	case bool:
-		return fmt.Sprintf("%t", face), true
-	}
-	return "", false
-}
 
 func insert(tx *sql.Tx, root string, entries []string, verbose bool, log *logrus.Entry) error {
 	if len(entries) == 0 {
@@ -129,20 +116,16 @@ func process(config *IngestionConfig, nc *nats.Conn, log *logrus.Entry, tc table
 
 	// build worker pool
 	shared := make(chan *nats.Msg, config.BufferSize)
-	bufSub := &messaging.BufferedSubscriber{
-		Subject:  config.Subject,
-		Group:    config.Group,
-		Messages: shared,
-	}
 	wg, err := messaging.BuildBatchingWorkerPool(shared, config.PoolSize, config.BatchSize, config.BatchTimeout, log, hb(db, config.LogQueries))
 	if err != nil {
 		return err
 	}
 
-	if err := bufSub.Subscribe(nc, log); err != nil {
+	sub, err := messaging.BufferedSubscribe(shared, nc, config.Subject, config.Group)
+	if err != nil {
 		return err
 	}
-	defer bufSub.Unsubscribe()
+	defer sub.Unsubscribe()
 
 	wg.Wait()
 	return nil

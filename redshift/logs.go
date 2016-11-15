@@ -3,8 +3,6 @@ package redshift
 import (
 	"database/sql"
 
-	"encoding/json"
-
 	"strings"
 
 	"fmt"
@@ -73,68 +71,39 @@ func BuildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 		dimValues := []string{}
 		for _, raw := range batch {
 			log := log.WithField("source", raw.Subject)
-			m := map[string]interface{}{}
-			if err := json.Unmarshal(raw.Data, &m); err == nil {
-				id := id()
 
-				level := "unknown"
-				var msg, timestamp, hostname string
-				for k, v := range m {
-					k = strings.ToLower(k)
-					switch k {
-					case "msg", "@msg":
-						if val, ok := v.(string); ok {
-							val = strings.TrimSpace(val)
-							val = sanitize(val)
-							if len(val) > MaxLineLength {
-								log.Debugf("Skipping line because it is too long: '%s'", val)
-								continue
-							}
-							if len(val) == 0 {
-								continue
-							}
-							msg = val
-						}
-					case "time", "@timestamp", "@time", "timestamp", "_timestamp":
-						if val, ok := v.(string); ok {
-							timestamp = val
-						}
-					case "level":
-						if val, ok := v.(string); ok {
-							level = val
-						}
-					case "hostname", "host":
-						if val, ok := v.(string); ok {
-							hostname = val
-						}
-					default:
-						if asStr, ok := asString(v); ok {
-							dimValues = append(dimValues, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
-						} else {
-							log.Warnf("Unsupported type for dim: %s, type: %s, value: %v", k, reflect.TypeOf(v).String(), v)
-						}
-					}
-				}
-				if msg != "" {
-					if timestamp == "" {
-						timestamp = time.Now().Format(time.RFC822Z)
-						log.Debugf("Failed to find a timestamp field, using now. source %s, msg: %s", raw.Subject, string(raw.Data))
-					}
-					lineValues = append(lineValues, fmt.Sprintf(
-						"('%s', '%s', '%s', '%s', '%s', '%s', default)",
-						id,
-						raw.Subject,
-						msg,
-						timestamp,
-						level,
-						hostname,
-					))
-				} else {
-					log.Warnf("failed to find 'msg' from '%s' field in %s", raw.Subject, string(raw.Data))
-				}
-			} else {
-				log.WithError(err).Warn("Failed to parse incoming message - skipping")
+			msg, err := messaging.ExtractLogMsg(raw.Data, log)
+			if err != nil {
+				log.WithError(err).Warn("Failed to parse log line - skipping it")
+				continue
 			}
+
+			// validate the message
+			if len(msg.Msg) > MaxLineLength {
+				log.Debugf("Skipping line because it is too long: '%s'", msg.Msg)
+				continue
+			}
+
+			msg.Msg = sanitize(msg)
+
+			// convert the dims to strings
+			for k, v := range msg.Dims {
+				if asStr, ok := asString(v); ok {
+					dimValues = append(dimValues, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
+				} else {
+					log.Warnf("Unsupported type for dim: %s, type: %s, value: %v", k, reflect.TypeOf(v).String(), v)
+				}
+			}
+
+			lineValues = append(lineValues, fmt.Sprintf(
+				"('%s', '%s', '%s', '%s', '%s', '%s', default)",
+				id,
+				raw.Subject,
+				msg.Msg,
+				msg.Timestamp.Format(time.RFC822Z),
+				msg.Level,
+				msg.Hostname,
+			))
 		}
 
 		log.WithFields(logrus.Fields{
@@ -167,4 +136,18 @@ func BuildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 
 func sanitize(in string) string {
 	return strings.Replace(in, "'", "", -1)
+}
+
+func asString(face interface{}) (string, bool) {
+	switch face.(type) {
+	case int, int32, int64:
+		return fmt.Sprintf("%d", face), true
+	case string:
+		return face.(string), true
+	case float32, float64:
+		return fmt.Sprintf("%f", face), true
+	case bool:
+		return fmt.Sprintf("%t", face), true
+	}
+	return "", false
 }

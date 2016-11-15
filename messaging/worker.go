@@ -9,37 +9,15 @@ import (
 	"github.com/nats-io/nats"
 )
 
-type BufferedSubscriber struct {
-	*nats.Subscription
-	Subject string
-	Group   string
-
-	Messages chan *nats.Msg
-}
-
-func (bs *BufferedSubscriber) Subscribe(nc *nats.Conn, log *logrus.Entry) error {
-	log = log.WithFields(logrus.Fields{
-		"subject": bs.Subject,
-		"group":   bs.Group,
-	})
-
+func BufferedSubscribe(msgs chan<- *nats.Msg, nc *nats.Conn, subject, group string) (*nats.Subscription, error) {
 	writer := func(m *nats.Msg) {
-		bs.Messages <- m
+		msgs <- m
 	}
 
-	var err error
-	log.Info("Subscribing to nats")
-	if bs.Group != "" {
-		bs.Subscription, err = nc.QueueSubscribe(bs.Subject, bs.Group, writer)
-	} else {
-		bs.Subscription, err = nc.Subscribe(bs.Subject, writer)
+	if group != "" {
+		return nc.QueueSubscribe(subject, group, writer)
 	}
-	if err != nil {
-		log.WithError(err).Fatal("Failed to subscribe")
-		return err
-	}
-
-	return err
+	return nc.Subscribe(subject, writer)
 }
 
 func BuildBatchingWorkerPool(shared chan *nats.Msg, poolSize, batchSize, timeoutSec int, log *logrus.Entry, h BatchHandler) (*sync.WaitGroup, error) {
@@ -63,18 +41,18 @@ func BuildBatchingWorkerPool(shared chan *nats.Msg, poolSize, batchSize, timeout
 	return wg, nil
 }
 
-type BatchHandler func(batch []*nats.Msg, log *logrus.Entry)
+type BatchHandler func(batch map[time.Time]*nats.Msg, log *logrus.Entry)
 
 var inflight int32
 
 func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h BatchHandler) (chan<- (*nats.Msg), chan<- bool) {
 	batchLock := new(sync.Mutex)
-	currentBatch := []*nats.Msg{}
+	currentBatch := map[time.Time]*nats.Msg{}
 
 	incoming := make(chan *nats.Msg, batchSize)
 	shutdown := make(chan bool)
 
-	wrapped := func(batch []*nats.Msg, log *logrus.Entry) {
+	wrapped := func(batch map[time.Time]*nats.Msg, log *logrus.Entry) {
 		start := time.Now()
 		flying := atomic.AddInt32(&inflight, 1)
 		l := log.WithFields(logrus.Fields{
@@ -98,10 +76,15 @@ func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h Bat
 			select {
 			case m := <-incoming:
 				batchLock.Lock()
-				currentBatch = append(currentBatch, m)
+				now := time.Now()
+				if _, exists := currentBatch[now]; exists {
+					log.Warn("Going too fast! There is already a message at %s", now.String())
+				}
+				currentBatch[now] = m
+
 				if len(currentBatch) > batchSize {
 					out := currentBatch
-					currentBatch = []*nats.Msg{}
+					currentBatch = make(map[time.Time]*nats.Msg)
 					go wrapped(out, log.WithField("reason", "size"))
 				}
 				batchLock.Unlock()

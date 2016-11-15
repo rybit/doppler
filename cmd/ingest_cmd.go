@@ -8,6 +8,7 @@ import (
 
 	"github.com/rybit/doppler/messaging"
 	"github.com/rybit/doppler/redshift"
+	"github.com/rybit/doppler/scalyr"
 )
 
 var ingestCmd = &cobra.Command{
@@ -66,7 +67,12 @@ func ingest(cmd *cobra.Command, args []string) {
 		go func() {
 			defer wg.Done()
 			l := log.WithField("component", "scalyr")
-			l.Error("TODO")
+			err := scalyr.ProcessLogsToScalyr(nc, l, config.ScalyrConf)
+			if err != nil {
+				l.WithError(err).Warn("Error while processing logs")
+			} else {
+				l.Info("Shutdown processing logs")
+			}
 		}()
 	}
 
