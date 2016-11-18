@@ -8,28 +8,23 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	_ "github.com/lib/pq" // Postgres driver.
-	"github.com/pkg/errors"
-	"github.com/rybit/doppler/messaging"
-
-	"github.com/nats-io/nats"
 	"github.com/pborman/uuid"
+	"github.com/pkg/errors"
+
+	"github.com/rybit/doppler/messaging"
 )
 
-type IngestionConfig struct {
-	Host         string  `mapstructure:"host"`
-	Port         int     `mapstructure:"port"`
-	DB           string  `mapstructure:"db"`
-	User         *string `mapstructure:"user"`
-	Pass         *string `mapstructure:"pass"`
-	Timeout      int     `mapstructure:"connect_timeout"`
-	LogQueries   bool    `mapstructure:"log_queries"`
-	BatchTimeout int     `mapstructure:"batch_timeout"`
-	BatchSize    int     `mapstructure:"batch_size"`
+type Config struct {
+	Host       string  `mapstructure:"host"`
+	Port       int     `mapstructure:"port"`
+	DB         string  `mapstructure:"db"`
+	User       *string `mapstructure:"user"`
+	Pass       *string `mapstructure:"pass"`
+	Timeout    int     `mapstructure:"connect_timeout"`
+	LogQueries bool    `mapstructure:"log_queries"`
 
-	Subject    string `mapstructure:"subject"`
-	Group      string `mapstructure:"group"`
-	PoolSize   int    `mapstructure:"pool_size"`
-	BufferSize int    `mapstructure:"buffer_size"`
+	MetricsConf *messaging.IngestConfig `mapstructure:"metrics_conf"`
+	LinesConf   *messaging.IngestConfig `mapstructure:"lines_conf"`
 }
 
 func id() string {
@@ -48,7 +43,6 @@ func ConnectToRedshift(host string, port int, db string, user, pass *string, tim
 
 	return sql.Open("postgres", source)
 }
-
 
 func insert(tx *sql.Tx, root string, entries []string, verbose bool, log *logrus.Entry) error {
 	if len(entries) == 0 {
@@ -86,47 +80,5 @@ func insert(tx *sql.Tx, root string, entries []string, verbose bool, log *logrus
 		return errors.New("Incorrect amount saved")
 	}
 
-	return nil
-}
-
-type tableCreator func(*sql.DB) error
-type handlerBuilder func(*sql.DB, bool) messaging.BatchHandler
-
-func process(config *IngestionConfig, nc *nats.Conn, log *logrus.Entry, tc tableCreator, hb handlerBuilder) error {
-	log.WithFields(logrus.Fields{
-		"db":   config.DB,
-		"host": config.Host,
-		"port": config.Port,
-	}).Info("Connecting to Redshift")
-	db, err := ConnectToRedshift(
-		config.Host,
-		config.Port,
-		config.DB,
-		config.User,
-		config.Pass,
-		config.Timeout,
-	)
-	if err != nil {
-		return err
-	}
-
-	if err := tc(db); err != nil {
-		return err
-	}
-
-	// build worker pool
-	shared := make(chan *nats.Msg, config.BufferSize)
-	wg, err := messaging.BuildBatchingWorkerPool(shared, config.PoolSize, config.BatchSize, config.BatchTimeout, log, hb(db, config.LogQueries))
-	if err != nil {
-		return err
-	}
-
-	sub, err := messaging.BufferedSubscribe(shared, nc, config.Subject, config.Group)
-	if err != nil {
-		return err
-	}
-	defer sub.Unsubscribe()
-
-	wg.Wait()
 	return nil
 }

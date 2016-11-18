@@ -10,31 +10,15 @@ import (
 	"errors"
 
 	"github.com/Sirupsen/logrus"
+	"github.com/rybit/nats_metrics"
 )
-
-const (
-	CounterType MetricType = "counter"
-	GaugeType   MetricType = "gauge"
-	TimerType   MetricType = "timer"
-)
-
-type MetricType string
-type Dims map[string]interface{}
-
-type InboundMetric struct {
-	Timestamp time.Time  `json:"timestamp"`
-	Value     int64      `json:"value"`
-	Name      string     `json:"name"`
-	Dims      *Dims      `json:"dimensions"`
-	Type      MetricType `json:"type"`
-}
 
 type LogMessage struct {
 	Timestamp time.Time
 	Msg       string
 	Hostname  string
 	Level     string
-	Dims      Dims
+	Dims      metrics.DimMap
 }
 
 func ExtractLogMsg(data []byte, log *logrus.Entry) (*LogMessage, error) {
@@ -93,7 +77,7 @@ func ExtractLogMsg(data []byte, log *logrus.Entry) (*LogMessage, error) {
 
 func extractTimestamp(face interface{}) (time.Time, error) {
 	if unix, ok := face.(int); ok {
-		return time.Unix(unix, 0), nil
+		return time.Unix(int64(unix), 0), nil
 	}
 
 	if unix, ok := face.(int64); ok {

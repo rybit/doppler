@@ -9,6 +9,21 @@ import (
 	"github.com/nats-io/nats"
 )
 
+func ConsumeInBatches(nc *nats.Conn, log *logrus.Entry, config *IngestConfig, handler BatchHandler) (*nats.Subscription, *sync.WaitGroup, error) {
+	shared := make(chan *nats.Msg, config.BufferSize)
+	wg, err := BuildBatchingWorkerPool(shared, config.PoolSize, config.BatchSize, config.BatchTimeout, log, handler)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sub, err := BufferedSubscribe(shared, nc, config.Subject, config.Group)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return sub, wg, err
+}
+
 func BufferedSubscribe(msgs chan<- *nats.Msg, nc *nats.Conn, subject, group string) (*nats.Subscription, error) {
 	writer := func(m *nats.Msg) {
 		msgs <- m
@@ -92,7 +107,7 @@ func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h Bat
 				batchLock.Lock()
 				if len(currentBatch) > 0 {
 					out := currentBatch
-					currentBatch = []*nats.Msg{}
+					currentBatch = make(map[time.Time]*nats.Msg)
 					go wrapped(out, log.WithField("reason", "timeout"))
 				}
 				batchLock.Unlock()

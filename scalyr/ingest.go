@@ -1,18 +1,11 @@
 package scalyr
 
 import (
-	"strings"
-
-	"reflect"
-
 	"fmt"
-
-	"net/http"
-
+	"strings"
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/docker/docker/api/types/time"
 	"github.com/nats-io/nats"
 	"github.com/pborman/uuid"
 	"github.com/rybit/doppler/messaging"
@@ -38,27 +31,22 @@ const (
 	fatalSeverity  scalyrSeverity = 6
 )
 
-type ScalyrConfig struct {
-	Token string `mapstructure:"token"`
+type Config struct {
+	Token    string `mapstructure:"token"`
+	Endpoint string `mapstructure:"endpoint"`
 
-	BatchTimeout int `mapstructure:"batch_timeout"`
-	BatchSize    int `mapstructure:"batch_size"`
-
-	Subject    string `mapstructure:"subject"`
-	Group      string `mapstructure:"group"`
-	PoolSize   int    `mapstructure:"pool_size"`
-	BufferSize int    `mapstructure:"buffer_size"`
+	LinesConfig *messaging.IngestConfig `mapstructure:"lines_conf"`
 }
 
-func ProcessLogsToScalyr(nc *nats.Conn, log *logrus.Entry, config *ScalyrConfig) error {
+func ProcessLines(nc *nats.Conn, log *logrus.Entry, config *Config) error {
 	var sessionID = uuid.NewRandom().String()
-
-	shared := make(chan *nats.Msg, config.BufferSize)
+	ingestConfig := config.LinesConfig
+	shared := make(chan *nats.Msg, ingestConfig.BufferSize)
 	wg, err := messaging.BuildBatchingWorkerPool(
 		shared,
-		config.PoolSize,
-		config.BatchSize,
-		config.BatchTimeout,
+		ingestConfig.PoolSize,
+		ingestConfig.BatchSize,
+		ingestConfig.BatchTimeout,
 		log.WithField("session_id", sessionID),
 		buildHandler(config),
 	)
@@ -66,7 +54,7 @@ func ProcessLogsToScalyr(nc *nats.Conn, log *logrus.Entry, config *ScalyrConfig)
 		return err
 	}
 
-	sub, err := messaging.BufferedSubscribe(shared, nc, config.Subject, config.Group)
+	sub, err := messaging.BufferedSubscribe(shared, nc, ingestConfig.Subject, ingestConfig.Group)
 	if err != nil {
 		return err
 	}
@@ -85,9 +73,8 @@ type scalyrEvent struct {
 	Attrs     map[string]interface{} `json:"attrs"`
 }
 
-func buildHandler(config *ScalyrConfig) messaging.BatchHandler {
-	baseID := uuid.NewRandom().String()
-	client := http.Client{}
+func buildHandler(config *Config) messaging.BatchHandler {
+	//baseID := uuid.NewRandom().String()
 	type parsedBatch struct {
 		threads   map[string]bool
 		events    []scalyrEvent
@@ -99,64 +86,65 @@ func buildHandler(config *ScalyrConfig) messaging.BatchHandler {
 	// need to be always increasing. Meaning we can't write multiple batches over the
 	// wire at the same time. Batches are also per host so that scalyr can map host <-> streams
 	// we will generate a sessionID per host/stream
-	batches := make(chan parsedBatch)
+	//batches := make(chan parsedBatch)
 
 	return func(batch map[time.Time]*nats.Msg, log *logrus.Entry) {
-		perSession := make(map[string]*parsedBatch)
+		// TODO fix this all
+		//perSession := make(map[string]*parsedBatch)
+		//
+		////threads := map[string]bool{}
+		////sessions := map[string][]scalyrEvent[]{}
+		//
+		//for _, raw := range batch {
+		//	log := log.WithField("source", raw.Subject)
+		//
+		//	msg, err := messaging.ExtractLogMsg(raw.Data, log)
+		//	if err != nil {
+		//		log.WithError(err).Warn("Failed to parse log line - skipping it")
+		//		continue
+		//	}
+		//
+		//	// now get the batch this is going to be a part of
+		//	id := sessionID(baseID, msg.Hostname, raw.Subject)
+		//	log = log.WithField("session_id", id)
+		//	batch := perSession[id]
+		//	if batch == nil {
+		//		batch = &parsedBatch{
+		//			sessionID: id,
+		//			hostname:  msg.Hostname,
+		//			threads:   map[string]bool{},
+		//			events:    []scalyrEvent{},
+		//		}
+		//	}
+		//
+		//	// build the actual event
+		//	attrs := map[string]interface{}{
+		//		"message":  msg.Msg,
+		//		"hostname": msg.Hostname,
+		//	}
+		//	for k, v := range msg.Dims {
+		//		if onlyStringOrNumber(v) {
+		//			attrs[k] = v
+		//		} else {
+		//			log.Warnf("Unsupported type for dim: %s, type: %s, value: %v", k, reflect.TypeOf(v).String(), v)
+		//		}
+		//	}
+		//
+		//	batch.events = append(batch.events, scalyrEvent{
+		//		Severity:  severity(msg.Level),
+		//		Attrs:     attrs,
+		//		Timestamp: fmt.Sprintf("%d", msg.Timestamp.UnixNano()),
+		//		Type:      normalEventType,
+		//		Thread:    raw.Subject,
+		//	})
+		//	batch.threads[raw.Subject] = true
+		//}
+		//
+		//log.Debug("Finished parsing batch of log messages into %d scalyr batches", len(perSession))
 
-		//threads := map[string]bool{}
-		//sessions := map[string][]scalyrEvent[]{}
-
-		for _, raw := range batch {
-			log := log.WithField("source", raw.Subject)
-
-			msg, err := messaging.ExtractLogMsg(raw.Data, log)
-			if err != nil {
-				log.WithError(err).Warn("Failed to parse log line - skipping it")
-				continue
-			}
-
-			// now get the batch this is going to be a part of
-			id := sessionID(baseID, msg.Hostname, raw.Subject)
-			log = log.WithField("session_id", id)
-			batch := perSession[id]
-			if batch == nil {
-				batch = *parsedBatch{
-					sessionID: id,
-					hostname:  msg.Hostname,
-					threads:   map[string]bool{},
-					events:    []scalyrEvent{},
-				}
-			}
-
-			// build the actual event
-			attrs := map[string]interface{}{
-				"message":  msg.Msg,
-				"hostname": msg.Hostname,
-			}
-			for k, v := range msg.Dims {
-				if onlyStringOrNumber(v) {
-					attrs[k] = v
-				} else {
-					log.Warnf("Unsupported type for dim: %s, type: %s, value: %v", k, reflect.TypeOf(v).String(), v)
-				}
-			}
-
-			batch.events = append(batch.events, scalyrEvent{
-				Severity:  severity(msg.Level),
-				Attrs:     attrs,
-				Timestamp: fmt.Sprintf("%d", msg.Timestamp.UnixNano()),
-				Type:      normalEventType,
-				Thread:    raw.Subject,
-			})
-			batch.threads[raw.Subject] = true
-		}
-
-		log.Debug("Finished parsing batch of log messages into %d scalyr batches", len(perSession))
-
-		for _, b := range perSession {
-			batches <- b // TODO
-		}
+		//for _, b := range perSession {
+		//	batches <- b // TODO
+		//}
 	}
 }
 

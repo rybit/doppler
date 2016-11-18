@@ -49,11 +49,40 @@ const (
 	MaxLineLength = 65536
 )
 
-func ProcessLines(nc *nats.Conn, log *logrus.Entry, config *IngestionConfig) error {
-	return process(config, nc, log, CreateLogsTables, BuildLogsHandler)
+func ProcessLines(nc *nats.Conn, log *logrus.Entry, config *Config) error {
+	log.WithFields(logrus.Fields{
+		"db":   config.DB,
+		"host": config.Host,
+		"port": config.Port,
+	}).Info("Connecting to Redshift")
+	db, err := ConnectToRedshift(
+		config.Host,
+		config.Port,
+		config.DB,
+		config.User,
+		config.Pass,
+		config.Timeout,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := createLogsTables(db); err != nil {
+		return err
+	}
+
+	handler := buildLogsHandler(db, config.LogQueries)
+	sub, wg, err := messaging.ConsumeInBatches(nc, log, config.MetricsConf, handler)
+	if err != nil {
+		return err
+	}
+	defer sub.Unsubscribe()
+
+	wg.Wait()
+	return nil
 }
 
-func CreateLogsTables(db *sql.DB) error {
+func createLogsTables(db *sql.DB) error {
 	if _, err := db.Exec(createLines); err != nil {
 		return errors.Wrap(err, "creating metrics table")
 	}
@@ -65,8 +94,8 @@ func CreateLogsTables(db *sql.DB) error {
 	return nil
 }
 
-func BuildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
-	return func(batch []*nats.Msg, log *logrus.Entry) {
+func buildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
+	return func(batch map[time.Time]*nats.Msg, log *logrus.Entry) {
 		lineValues := []string{}
 		dimValues := []string{}
 		for _, raw := range batch {
@@ -84,7 +113,7 @@ func BuildLogsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 				continue
 			}
 
-			msg.Msg = sanitize(msg)
+			msg.Msg = sanitize(msg.Msg)
 
 			// convert the dims to strings
 			for k, v := range msg.Dims {
