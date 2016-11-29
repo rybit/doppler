@@ -8,10 +8,28 @@ import (
 
 	"github.com/Sirupsen/logrus"
 	_ "github.com/lib/pq" // Postgres driver.
+	"github.com/pborman/uuid"
 	"github.com/pkg/errors"
 
-	"github.com/pborman/uuid"
+	"github.com/rybit/doppler/messaging"
 )
+
+type Config struct {
+	Host    string  `mapstructure:"host"`
+	Port    int     `mapstructure:"port"`
+	DB      string  `mapstructure:"db"`
+	User    *string `mapstructure:"user"`
+	Pass    *string `mapstructure:"pass"`
+	Timeout int     `mapstructure:"connect_timeout"`
+
+	MetricsConf *DBIngestConfig `mapstructure:"metrics_conf"`
+	LinesConf   *DBIngestConfig `mapstructure:"lines_conf"`
+}
+
+type DBIngestConfig struct {
+	messaging.IngestConfig `mapstructure:",squash"`
+	LogQueries             bool `mapstructure:"log_queries"`
+}
 
 func id() string {
 	return uuid.NewRandom().String()
@@ -28,20 +46,6 @@ func ConnectToRedshift(host string, port int, db string, user, pass *string, tim
 	}
 
 	return sql.Open("postgres", source)
-}
-
-func asString(face interface{}) (string, bool) {
-	switch face.(type) {
-	case int, int32, int64:
-		return fmt.Sprintf("%d", face), true
-	case string:
-		return face.(string), true
-	case float32, float64:
-		return fmt.Sprintf("%f", face), true
-	case bool:
-		return fmt.Sprintf("%t", face), true
-	}
-	return "", false
 }
 
 func insert(tx *sql.Tx, root string, entries []string, verbose bool, log *logrus.Entry) error {

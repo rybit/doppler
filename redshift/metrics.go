@@ -15,6 +15,7 @@ import (
 	"reflect"
 
 	"github.com/rybit/doppler/messaging"
+	"github.com/rybit/nats_metrics"
 )
 
 const (
@@ -44,7 +45,40 @@ const (
 	insertMetricDim = `insert into metric_dims (key, value, metric_id) values `
 )
 
-func CreateMetricsTables(db *sql.DB) error {
+func ProcessMetrics(nc *nats.Conn, log *logrus.Entry, config *Config) error {
+	log.WithFields(logrus.Fields{
+		"db":   config.DB,
+		"host": config.Host,
+		"port": config.Port,
+	}).Info("Connecting to Redshift")
+	db, err := ConnectToRedshift(
+		config.Host,
+		config.Port,
+		config.DB,
+		config.User,
+		config.Pass,
+		config.Timeout,
+	)
+	if err != nil {
+		return err
+	}
+
+	if err := createMetricsTables(db); err != nil {
+		return err
+	}
+
+	handler := buildMetricsHandler(db, config.MetricsConf.LogQueries)
+	sub, wg, err := messaging.ConsumeInBatches(nc, log, &config.MetricsConf.IngestConfig, handler)
+	if err != nil {
+		return err
+	}
+	defer sub.Unsubscribe()
+
+	wg.Wait()
+	return nil
+}
+
+func createMetricsTables(db *sql.DB) error {
 	if _, err := db.Exec(createMetrics); err != nil {
 		return errors.Wrap(err, "creating metrics table")
 	}
@@ -56,12 +90,12 @@ func CreateMetricsTables(db *sql.DB) error {
 	return nil
 }
 
-func BuildMetricsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
-	return func(batch []*nats.Msg, log *logrus.Entry) {
+func buildMetricsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
+	return func(batch map[time.Time]*nats.Msg, log *logrus.Entry) {
 		metricValues := []string{}
 		dimValues := []string{}
 		for _, raw := range batch {
-			m := new(messaging.InboundMetric)
+			m := new(metrics.RawMetric)
 			if err := json.Unmarshal(raw.Data, m); err == nil {
 				id := id()
 				if m.Timestamp.IsZero() {
@@ -77,13 +111,12 @@ func BuildMetricsHandler(db *sql.DB, verbose bool) messaging.BatchHandler {
 					m.Type,
 				)
 				metricValues = append(metricValues, tail)
-				if m.Dims != nil {
-					for k, v := range *m.Dims {
-						if asStr, ok := asString(v); ok {
-							dimValues = append(dimValues, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
-						} else {
-							log.Warnf("Unsupported type for dim: %s, type: %s, value: %v", k, reflect.TypeOf(v).String(), v)
-						}
+
+				for k, v := range m.Dims {
+					if asStr, ok := asString(v); ok {
+						dimValues = append(dimValues, fmt.Sprintf("('%s', '%s', '%s')", k, asStr, id))
+					} else {
+						log.Warnf("Unsupported type for dim: %s, type: %s, value: %v", k, reflect.TypeOf(v).String(), v)
 					}
 				}
 			} else {

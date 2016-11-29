@@ -11,3 +11,7 @@ import:
   version: v0.8.0
 - package: github.com/spf13/cobra
 - package: github.com/spf13/viper
+- package: github.com/influxdata/influxdb
+  version: v1.1.0
+- package: github.com/rybit/nats_metrics
+  version: v1.1.1

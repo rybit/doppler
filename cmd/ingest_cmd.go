@@ -1,16 +1,16 @@
 package cmd
 
 import (
-	"database/sql"
 	"sync"
 
 	"github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 
 	"github.com/nats-io/nats"
-	"github.com/rybit/doppler/conf"
+	"github.com/rybit/doppler/influx"
 	"github.com/rybit/doppler/messaging"
 	"github.com/rybit/doppler/redshift"
+	"github.com/rybit/doppler/scalyr"
 )
 
 var ingestCmd = &cobra.Command{
@@ -34,19 +34,30 @@ func ingest(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to nats")
 	}
+
 	wg := new(sync.WaitGroup)
+	startRedshiftConsumers(wg, nc, log, config.RedshiftConf)
+	startScalyrConsumers(wg, nc, log, config.ScalyrConf)
+	startInfluxConsumers(wg, nc, log, config.InfluxConf)
+
+	log.Info("Consumers started")
+	wg.Wait()
+	log.Info("All consumers stopped - shutting down")
+}
+
+func startRedshiftConsumers(wg *sync.WaitGroup, nc *nats.Conn, log *logrus.Entry, config *redshift.Config) {
+	if config == nil {
+		return
+	}
+
+	log = log.WithField("destination", "redshift")
+
 	if config.MetricsConf != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			l := log.WithField("component", "metrics")
-			err := process(
-				config.MetricsConf,
-				nc,
-				l,
-				redshift.CreateMetricsTables,
-				redshift.BuildMetricsHandler,
-			)
+			l := log.WithField("origin", "metrics")
+			err := redshift.ProcessMetrics(nc, l, config)
 			if err != nil {
 				l.WithError(err).Warn("Error while processing metrics")
 			} else {
@@ -55,73 +66,55 @@ func ingest(cmd *cobra.Command, args []string) {
 		}()
 	}
 
-	if config.LogLineConf != nil {
+	if config.LinesConf != nil {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			l := log.WithField("component", "logs")
-			err := process(
-				config.LogLineConf,
-				nc,
-				l,
-				redshift.CreateLogsTables,
-				redshift.BuildLogsHandler,
-			)
+			l := log.WithField("origin", "lines")
+			err := redshift.ProcessLines(nc, l, config)
 			if err != nil {
-				l.WithError(err).Warn("Error while processing logs")
+				l.WithError(err).Warn("Error while processing lines")
 			} else {
-				l.Info("Shutdown processing logs")
+				l.Info("Shutdown processing lines")
 			}
 		}()
 	}
-
-	log.Info("Ingestion started")
-	wg.Wait()
-	log.Info("Shutting down ingestion")
 }
 
-type tableCreator func(*sql.DB) error
-type handlerBuilder func(*sql.DB, bool) messaging.BatchHandler
-
-func process(config *conf.IngestionConfig, nc *nats.Conn, log *logrus.Entry, tc tableCreator, hb handlerBuilder) error {
-	log.WithFields(logrus.Fields{
-		"db":   config.DB,
-		"host": config.Host,
-		"port": config.Port,
-	}).Info("Connecting to Redshift")
-	db, err := redshift.ConnectToRedshift(
-		config.Host,
-		config.Port,
-		config.DB,
-		config.User,
-		config.Pass,
-		config.Timeout,
-	)
-	if err != nil {
-		return err
+func startScalyrConsumers(wg *sync.WaitGroup, nc *nats.Conn, log *logrus.Entry, config *scalyr.Config) {
+	if config == nil {
+		return
 	}
 
-	if err := tc(db); err != nil {
-		return err
+	log = log.WithField("destination", "scalyr")
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		l := log.WithField("origin", "logs")
+		err := scalyr.ProcessLines(nc, l, config)
+		if err != nil {
+			l.WithError(err).Warn("Error while processing logs")
+		} else {
+			l.Info("Shutdown processing logs")
+		}
+	}()
+}
+
+func startInfluxConsumers(wg *sync.WaitGroup, nc *nats.Conn, log *logrus.Entry, config *influx.Config) {
+	if config == nil && config.MetricsConf != nil {
+		return
 	}
 
-	// build worker pool
-	shared := make(chan *nats.Msg, config.BufferSize)
-	bufSub := &messaging.BufferedSubscriber{
-		Subject:  config.Subject,
-		Group:    config.Group,
-		Messages: shared,
-	}
-	wg, err := messaging.BuildBatchingWorkerPool(shared, config.PoolSize, config.BatchSize, config.BatchTimeout, log, hb(db, config.LogQueries))
-	if err != nil {
-		return err
-	}
-
-	if err := bufSub.Subscribe(nc, log); err != nil {
-		return err
-	}
-	defer bufSub.Unsubscribe()
-
-	wg.Wait()
-	return nil
+	log = log.WithField("destination", "influx")
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		l := log.WithField("origin", "metrics")
+		err := influx.ProcessMetrics(nc, l, config)
+		if err != nil {
+			l.WithError(err).Warn("Error while processing logs")
+		} else {
+			l.Info("Shutdown processing logs")
+		}
+	}()
 }
