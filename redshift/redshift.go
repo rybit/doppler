@@ -15,16 +15,20 @@ import (
 )
 
 type Config struct {
-	Host       string  `mapstructure:"host"`
-	Port       int     `mapstructure:"port"`
-	DB         string  `mapstructure:"db"`
-	User       *string `mapstructure:"user"`
-	Pass       *string `mapstructure:"pass"`
-	Timeout    int     `mapstructure:"connect_timeout"`
-	LogQueries bool    `mapstructure:"log_queries"`
+	Host    string  `mapstructure:"host"`
+	Port    int     `mapstructure:"port"`
+	DB      string  `mapstructure:"db"`
+	User    *string `mapstructure:"user"`
+	Pass    *string `mapstructure:"pass"`
+	Timeout int     `mapstructure:"connect_timeout"`
 
-	MetricsConf *messaging.IngestConfig `mapstructure:"metrics_conf"`
-	LinesConf   *messaging.IngestConfig `mapstructure:"lines_conf"`
+	MetricsConf *DBIngestConfig `mapstructure:"metrics_conf"`
+	LinesConf   *DBIngestConfig `mapstructure:"lines_conf"`
+}
+
+type DBIngestConfig struct {
+	messaging.IngestConfig `mapstructure:",squash"`
+	LogQueries             bool `mapstructure:"log_queries"`
 }
 
 func id() string {

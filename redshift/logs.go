@@ -71,8 +71,8 @@ func ProcessLines(nc *nats.Conn, log *logrus.Entry, config *Config) error {
 		return err
 	}
 
-	handler := buildLogsHandler(db, config.LogQueries)
-	sub, wg, err := messaging.ConsumeInBatches(nc, log, config.MetricsConf, handler)
+	handler := buildLogsHandler(db, config.LinesConf.LogQueries)
+	sub, wg, err := messaging.ConsumeInBatches(nc, log, &config.LinesConf.IngestConfig, handler)
 	if err != nil {
 		return err
 	}

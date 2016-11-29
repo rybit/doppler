@@ -1,10 +1,10 @@
-hash: 25f2f79c655a94b46ce461d1e1dbdbd08d8e2e3f790f87fdd93c4e563b7a6614
-updated: 2016-11-03T17:48:47.018092307-07:00
+hash: 6906d59fabac6020eb7b2e82d640e321ef6e352368b344d25275ebbfcd511fa1
+updated: 2016-11-18T10:48:36.599246361-08:00
 imports:
 - name: github.com/fsnotify/fsnotify
   version: fd9ec7deca8bf46ecd2a795baaacf2b3a9be1197
 - name: github.com/hashicorp/hcl
-  version: 6e968a3fcdcbab092f5307fd0d85479d5af1e4dc
+  version: c3e054bfd4dcf77b9965ed2b79b22afa2f41d4eb
   subpackages:
   - hcl/ast
   - hcl/parser
@@ -16,8 +16,8 @@ imports:
   - json/token
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
-- name: github.com/kr/fs
-  version: 2788f0dbd16903de03cb8186e5c7d97b69ad387b
+- name: github.com/influxdata/influxdb
+  version: 800da5732b91c816b0a097acf8887fa2af1efa1a
 - name: github.com/lib/pq
   version: d8eeeb8bae8896dd8e1b7e514ab0d396c4f12a1b
   subpackages:
@@ -41,38 +41,30 @@ imports:
   version: 45932ad32dfdd20826f5671da37a5f3ce9f26a8d
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
-- name: github.com/pkg/sftp
-  version: 4d0e916071f68db74f8a73926335f809396d6b42
+- name: github.com/rybit/nats_metrics
+  version: 1c87411ba1e72a7c68c37665fe9555ba5f0a7ec0
 - name: github.com/Sirupsen/logrus
   version: d26492970760ca5d33129d2d799e34be5c4782eb
 - name: github.com/spf13/afero
-  version: 52e4a6cfac46163658bd4f123c49b6ee7dc75f78
+  version: 06b7e5f50606ecd49148a01a6008942d9b669217
   subpackages:
   - mem
-  - sftp
 - name: github.com/spf13/cast
-  version: 2580bc98dc0e62908119e4737030cc2fdfc45e4c
+  version: 24b6558033ffe202bf42f0f3b870dcc798dd2ba8
 - name: github.com/spf13/cobra
-  version: 6e91dded25d73176bf7f60b40dd7aa1f0bf9be8d
+  version: 9495bc009a56819bdb0ddbc1a373e29c140bc674
 - name: github.com/spf13/jwalterweatherman
   version: 33c24e77fb80341fe7130ee7c594256ff08ccc46
 - name: github.com/spf13/pflag
   version: 5ccb023bc27df288a957c5e994cd44fd19619465
 - name: github.com/spf13/viper
   version: 651d9d916abc3c3d6a91a12549495caba5edffd2
-- name: golang.org/x/crypto
-  version: 9477e0b78b9ac3d0b03822fd95422e2fe07627cd
-  subpackages:
-  - ssh
-  - curve25519
-  - ed25519
-  - ed25519/internal/edwards25519
 - name: golang.org/x/sys
-  version: c200b10b5d5e122be351b67af224adc6128af5bf
+  version: b699b7032584f0953262cb2788a0ca19bb494703
   subpackages:
   - unix
 - name: golang.org/x/text
-  version: a8b38433e35b65ba247bb267317037dee1b70cea
+  version: a263ba8db058568bb9beba166777d9c9dbe75d68
   subpackages:
   - transform
   - unicode/norm

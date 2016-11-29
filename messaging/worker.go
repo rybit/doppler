@@ -20,7 +20,10 @@ func ConsumeInBatches(nc *nats.Conn, log *logrus.Entry, config *IngestConfig, ha
 	if err != nil {
 		return nil, nil, err
 	}
-
+	log.WithFields(logrus.Fields{
+		"group":   config.Group,
+		"subject": config.Subject,
+	}).Info("Subscription started")
 	return sub, wg, err
 }
 
@@ -93,7 +96,7 @@ func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h Bat
 				batchLock.Lock()
 				now := time.Now()
 				if _, exists := currentBatch[now]; exists {
-					log.Warn("Going too fast! There is already a message at %s", now.String())
+					log.Warnf("Going too fast! There is already a message at %s", now.String())
 				}
 				currentBatch[now] = m
 

@@ -67,8 +67,8 @@ func ProcessMetrics(nc *nats.Conn, log *logrus.Entry, config *Config) error {
 		return err
 	}
 
-	handler := buildMetricsHandler(db, config.LogQueries)
-	sub, wg, err := messaging.ConsumeInBatches(nc, log, config.MetricsConf, handler)
+	handler := buildMetricsHandler(db, config.MetricsConf.LogQueries)
+	sub, wg, err := messaging.ConsumeInBatches(nc, log, &config.MetricsConf.IngestConfig, handler)
 	if err != nil {
 		return err
 	}
