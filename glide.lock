@@ -1,10 +1,10 @@
-hash: 6906d59fabac6020eb7b2e82d640e321ef6e352368b344d25275ebbfcd511fa1
-updated: 2016-11-18T10:48:36.599246361-08:00
+hash: 32c3d34e2219158e4dbc9ceb0292c2dfebf20a30992bb931b0f7277f5e8883d0
+updated: 2016-11-29T15:24:44.211991491-08:00
 imports:
 - name: github.com/fsnotify/fsnotify
   version: fd9ec7deca8bf46ecd2a795baaacf2b3a9be1197
 - name: github.com/hashicorp/hcl
-  version: c3e054bfd4dcf77b9965ed2b79b22afa2f41d4eb
+  version: 5550aaba7896ad2a161888b40954bc0f0787bb81
   subpackages:
   - hcl/ast
   - hcl/parser
@@ -18,12 +18,16 @@ imports:
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/influxdata/influxdb
   version: 800da5732b91c816b0a097acf8887fa2af1efa1a
+  subpackages:
+  - client/v2
+  - models
+  - pkg/escape
 - name: github.com/lib/pq
-  version: d8eeeb8bae8896dd8e1b7e514ab0d396c4f12a1b
+  version: 4a82388ebc5138c8289fe9bc602cb0b3e32cd617
   subpackages:
   - oid
 - name: github.com/magiconair/properties
-  version: 0723e352fa358f9322c938cc2dadda874e9151a9
+  version: 9c47895dc1ce54302908ab8a43385d1f5df2c11c
 - name: github.com/mitchellh/mapstructure
   version: f3009df150dadf309fdee4a54ed65c124afad715
 - name: github.com/nats-io/nats
@@ -38,11 +42,11 @@ imports:
 - name: github.com/pelletier/go-buffruneio
   version: df1e16fde7fc330a0ca68167c23bf7ed6ac31d6d
 - name: github.com/pelletier/go-toml
-  version: 45932ad32dfdd20826f5671da37a5f3ce9f26a8d
+  version: 7cb988051d5045890cb91402a0b5fddc76c627bc
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/rybit/nats_metrics
-  version: 1c87411ba1e72a7c68c37665fe9555ba5f0a7ec0
+  version: aec4a70381624a1b673f4abb6efd4349570f1ab9
 - name: github.com/Sirupsen/logrus
   version: d26492970760ca5d33129d2d799e34be5c4782eb
 - name: github.com/spf13/afero
@@ -60,11 +64,11 @@ imports:
 - name: github.com/spf13/viper
   version: 651d9d916abc3c3d6a91a12549495caba5edffd2
 - name: golang.org/x/sys
-  version: b699b7032584f0953262cb2788a0ca19bb494703
+  version: d5645953809d8b4752afb2c3224b1f1ad73dfa70
   subpackages:
   - unix
 - name: golang.org/x/text
-  version: a263ba8db058568bb9beba166777d9c9dbe75d68
+  version: 4ea6c073aae78d08c7e95e95aa7f55b888287d6f
   subpackages:
   - transform
   - unicode/norm
