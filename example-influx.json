@@ -7,7 +7,7 @@
   },
   "log_conf": {
     "log_level": "debug",
-    "log_file": ""
+    "log_file": "/tmp/ingest-doppler.out"
   },
   "influx_conf": {
 	  "addr": "http://influx.lo:8086",
@@ -22,7 +22,7 @@
       "batch_size": 1000,
       "batch_timeout": 10,
       "buffer_size": 1000,
-      "pool_size": 1,
+      "pool_size": 4,
       "subject": "metrics.>"
     }
   }

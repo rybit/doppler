@@ -1,7 +1,6 @@
 package conf
 
 import (
-	"bufio"
 	"os"
 	"strings"
 
@@ -29,11 +28,11 @@ func ConfigureLogging(config *LoggingConfig) (*logrus.Entry, error) {
 
 	// use a file if you want
 	if config.File != "" {
-		f, errOpen := os.OpenFile(config.File, os.O_RDWR|os.O_APPEND, 0660)
+		f, errOpen := os.OpenFile(config.File, os.O_RDWR|os.O_APPEND|os.O_CREATE, 0664)
 		if errOpen != nil {
 			return nil, errOpen
 		}
-		logrus.SetOutput(bufio.NewWriter(f))
+		logrus.SetOutput(f)
 		logrus.Infof("Set output file to %s", config.File)
 	}
 

@@ -12,6 +12,10 @@ import (
 	"github.com/nats-io/nats"
 	"github.com/rybit/nats_metrics"
 
+	"crypto/tls"
+
+	"strings"
+
 	"github.com/rybit/doppler/messaging"
 )
 
@@ -20,10 +24,19 @@ func ProcessMetrics(nc *nats.Conn, log *logrus.Entry, config *Config) error {
 		return errors.New("Must provide a metrics configuration")
 	}
 
-	tls, err := config.TLSConfig()
-	if err != nil {
-		log.WithError(err).Warn("Failed to create tls config")
-		return err
+	var tls *tls.Config
+	var err error
+	if config.TLS != nil {
+		log.WithFields(logrus.Fields{
+			"ca_files":  strings.Join(config.TLS.CAFiles, ","),
+			"key_file":  config.TLS.KeyFile,
+			"cert_file": config.TLS.CertFile,
+		}).Info("Creating TLS context")
+		tls, err = config.TLS.TLSConfig()
+		if err != nil {
+			log.WithError(err).Warn("Failed to create tls config")
+			return err
+		}
 	}
 
 	c, err := client.NewHTTPClient(client.HTTPConfig{
@@ -38,11 +51,11 @@ func ProcessMetrics(nc *nats.Conn, log *logrus.Entry, config *Config) error {
 		return err
 	}
 
-	handler := buildHandler(c, config.MetricsConf)
+	handler := buildHandler(c, config.DB)
 	sub, wg, err := messaging.ConsumeInBatches(
 		nc,
-		log.WithField("db", config.MetricsConf.DB),
-		&config.MetricsConf.IngestConfig,
+		log.WithField("db", config.DB),
+		config.MetricsConf,
 		handler,
 	)
 	if err != nil {
@@ -54,7 +67,7 @@ func ProcessMetrics(nc *nats.Conn, log *logrus.Entry, config *Config) error {
 	return nil
 }
 
-func buildHandler(c client.Client, config *DBIngestConfig) messaging.BatchHandler {
+func buildHandler(c client.Client, db string) messaging.BatchHandler {
 	return func(batch map[time.Time]*nats.Msg, log *logrus.Entry) {
 		start := time.Now()
 		log = log.WithFields(logrus.Fields{
@@ -62,7 +75,7 @@ func buildHandler(c client.Client, config *DBIngestConfig) messaging.BatchHandle
 		})
 
 		bp, err := client.NewBatchPoints(client.BatchPointsConfig{
-			Database:  config.DB,
+			Database:  db,
 			Precision: "ns",
 		})
 		if err != nil {

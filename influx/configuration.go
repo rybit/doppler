@@ -1,56 +1,15 @@
 package influx
 
 import (
-	"crypto/tls"
-	"crypto/x509"
-	"fmt"
-	"io/ioutil"
-
 	"github.com/rybit/doppler/messaging"
+	"github.com/rybit/doppler/tls"
 )
 
 type Config struct {
-	Addr        string          `mapstructure:"addr"`
-	User        string          `masptructure:"user"`
-	Pass        string          `mapstructure:"pass"`
-	CAFiles     []string        `mapstructure:"ca_files"`
-	KeyFile     string          `mapstructure:"key_file"`
-	CertFile    string          `mapstructure:"cert_file"`
-	MetricsConf *DBIngestConfig `mapstructure:"metrics_conf"`
-}
-
-type DBIngestConfig struct {
-	messaging.IngestConfig `mapstructure:",squash"`
-	DB                     string `mapstructure:"db"`
-}
-
-func (cfg Config) TLSConfig() (*tls.Config, error) {
-	if cfg.CertFile == "" && cfg.KeyFile == "" && len(cfg.CAFiles) == 0 {
-		return nil, nil
-	}
-
-	pool := x509.NewCertPool()
-	for _, caFile := range cfg.CAFiles {
-		caData, err := ioutil.ReadFile(caFile)
-		if err != nil {
-			return nil, err
-		}
-
-		if !pool.AppendCertsFromPEM(caData) {
-			return nil, fmt.Errorf("Failed to add CA cert at %s", caFile)
-		}
-	}
-
-	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
-	if err != nil {
-		return nil, err
-	}
-
-	tlsConfig := &tls.Config{
-		RootCAs:      pool,
-		Certificates: []tls.Certificate{cert},
-		MinVersion:   tls.VersionTLS12,
-	}
-
-	return tlsConfig, nil
+	Addr        string                  `mapstructure:"addr"`
+	DB          string                  `mapstructure:"db"`
+	User        string                  `masptructure:"user"`
+	Pass        string                  `mapstructure:"pass"`
+	MetricsConf *messaging.IngestConfig `mapstructure:"metrics_conf"`
+	TLS         *tls.Config             `mapstructure:"tls"`
 }
