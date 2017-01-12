@@ -19,3 +19,11 @@ image: ## Build the Docker image.
 
 test: ## Run tests.
 	go test -v `go list ./... | grep -v /vendor/`
+
+release:
+	@if [ "$(strip $(VERSION))" == "" ]; then echo "No version provided"; exit 1; fi
+	go build -ldflags "-X github.com/rybit/doppler/cmd.Version=`git rev-parse HEAD`" -o doppler-${VERSION}
+	tar -czf doppler-darwin-amd64-${VERSION}.tar.gz doppler-${VERSION}
+	GOOS=linux GOARCH=amd64 go build -ldflags "-X github.com/rybit/doppler/cmd.Version=`git rev-parse HEAD`" -o doppler-${VERSION}
+	tar -czf doppler-linux-amd64-${VERSION}.tar.gz doppler-${VERSION}
+	rm doppler-${VERSION}
