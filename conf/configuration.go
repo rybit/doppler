@@ -14,8 +14,9 @@ import (
 )
 
 type Config struct {
-	NatsConf messaging.NatsConfig `mapstructure:"nats_conf"`
-	LogConf  LoggingConfig        `mapstructure:"log_conf"`
+	NatsConf  messaging.NatsConfig `mapstructure:"nats_conf"`
+	LogConf   LoggingConfig        `mapstructure:"log_conf"`
+	ReportSec int                  `mapstructure:"report_sec"`
 
 	ScalyrConf   *scalyr.Config   `mapstructure:"scalyr_conf"`
 	RedshiftConf *redshift.Config `mapstructure:"redshift_conf"`

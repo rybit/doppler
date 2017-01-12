@@ -1,10 +1,10 @@
-hash: 32c3d34e2219158e4dbc9ceb0292c2dfebf20a30992bb931b0f7277f5e8883d0
-updated: 2016-11-29T15:24:44.211991491-08:00
+hash: 1f7ab99ed14e22e2258c515a1d2f09de007c6bced6149cee1d40f5ae974c8aac
+updated: 2017-01-11T16:08:42.83380343-08:00
 imports:
 - name: github.com/fsnotify/fsnotify
   version: fd9ec7deca8bf46ecd2a795baaacf2b3a9be1197
 - name: github.com/hashicorp/hcl
-  version: 5550aaba7896ad2a161888b40954bc0f0787bb81
+  version: eb6f65b2d77ed5078887f960ff570fbddbbeb49d
   subpackages:
   - hcl/ast
   - hcl/parser
@@ -23,13 +23,13 @@ imports:
   - models
   - pkg/escape
 - name: github.com/lib/pq
-  version: 4a82388ebc5138c8289fe9bc602cb0b3e32cd617
+  version: 8df6253d1317616f36b0c3740eb30c239a7372cb
   subpackages:
   - oid
 - name: github.com/magiconair/properties
   version: 9c47895dc1ce54302908ab8a43385d1f5df2c11c
 - name: github.com/mitchellh/mapstructure
-  version: f3009df150dadf309fdee4a54ed65c124afad715
+  version: bfdb1a85537d60bc7e954e600c250219ea497417
 - name: github.com/nats-io/nats
   version: 61923ed1eaf8398000991fbbee2ef11ab5a5be0d
   subpackages:
@@ -45,6 +45,8 @@ imports:
   version: 7cb988051d5045890cb91402a0b5fddc76c627bc
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
+- name: github.com/rybit/nats_logrus_hook
+  version: 1236b915ecdc1963bf90fdfbb05fa815f5033a8c
 - name: github.com/rybit/nats_metrics
   version: aec4a70381624a1b673f4abb6efd4349570f1ab9
 - name: github.com/Sirupsen/logrus
@@ -54,21 +56,21 @@ imports:
   subpackages:
   - mem
 - name: github.com/spf13/cast
-  version: 24b6558033ffe202bf42f0f3b870dcc798dd2ba8
+  version: 56a7ecbeb18dde53c6db4bd96b541fd9741b8d44
 - name: github.com/spf13/cobra
-  version: 9495bc009a56819bdb0ddbc1a373e29c140bc674
+  version: 1dd5ff2e11b6dca62fdcb275eb804b94607d8b06
 - name: github.com/spf13/jwalterweatherman
-  version: 33c24e77fb80341fe7130ee7c594256ff08ccc46
+  version: fa7ca7e836cf3a8bb4ebf799f472c12d7e903d66
 - name: github.com/spf13/pflag
-  version: 5ccb023bc27df288a957c5e994cd44fd19619465
+  version: 25f8b5b07aece3207895bf19f7ab517eb3b22a40
 - name: github.com/spf13/viper
-  version: 651d9d916abc3c3d6a91a12549495caba5edffd2
+  version: 5ed0fc31f7f453625df314d8e66b9791e8d13003
 - name: golang.org/x/sys
-  version: d5645953809d8b4752afb2c3224b1f1ad73dfa70
+  version: d75a52659825e75fff6158388dddc6a5b04f9ba5
   subpackages:
   - unix
 - name: golang.org/x/text
-  version: 4ea6c073aae78d08c7e95e95aa7f55b888287d6f
+  version: 44f4f658a783b0cee41fe0a23b8fc91d9c120558
   subpackages:
   - transform
   - unicode/norm

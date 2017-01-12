@@ -10,9 +10,12 @@ import (
 )
 
 type NatsConfig struct {
-	tls.Config `mapstructure:",squash"`
+	TLSConfig *tls.Config `mapstructure:"tls_conf"`
 
 	Servers []string `mapstructure:"servers"`
+
+	MetricsSubject string `mapstructure:"metrics_subject"`
+	LogsSubject    string `mapstructure:"log_subject"`
 }
 
 // ServerString will build the proper string for nats connect
@@ -22,16 +25,20 @@ func (config *NatsConfig) ServerString() string {
 
 // ConnectToNats will do a TLS connection to the nats servers specified
 func ConnectToNats(config *NatsConfig, errHandler nats.ErrHandler) (*nats.Conn, error) {
-	tlsConfig, err := config.TLSConfig()
-	if err != nil {
-		return nil, err
+	options := []nats.Option{}
+	if config.TLSConfig != nil {
+		tlsConfig, err := config.TLSConfig.TLSConfig()
+		if err != nil {
+			return nil, err
+		}
+		options = append(options, nats.Secure(tlsConfig))
 	}
 
 	if errHandler != nil {
-		return nats.Connect(config.ServerString(), nats.Secure(tlsConfig), nats.ErrorHandler(errHandler))
+		options = append(options, nats.ErrorHandler(errHandler))
 	}
 
-	return nats.Connect(config.ServerString(), nats.Secure(tlsConfig))
+	return nats.Connect(config.ServerString(), options...)
 }
 
 func ErrorHandler(log *logrus.Entry) nats.ErrHandler {

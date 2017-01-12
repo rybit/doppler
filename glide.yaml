@@ -15,3 +15,5 @@ import:
   version: v1.1.0
 - package: github.com/rybit/nats_metrics
   version: v1.1.1
+- package: github.com/rybit/nats_logrus_hook
+  version: v1.0.2

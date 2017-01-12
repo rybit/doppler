@@ -70,6 +70,7 @@ func ProcessMetrics(nc *nats.Conn, log *logrus.Entry, config *Config) error {
 func buildHandler(c client.Client, db string) messaging.BatchHandler {
 	return func(batch map[time.Time]*nats.Msg, log *logrus.Entry) {
 		start := time.Now()
+		timer := metrics.NewTimer("doppler.influx.batch_dur", nil)
 		log = log.WithFields(logrus.Fields{
 			"batch_id": fmt.Sprintf("%d", start.Nanosecond()),
 		})
@@ -87,6 +88,7 @@ func buildHandler(c client.Client, db string) messaging.BatchHandler {
 		parseFailed := 0
 		parseSuccess := 0
 		log.Debug("starting to handle batch")
+		parsingTimer := metrics.NewTimer("doppler.influx.batch_parsing_dur", nil)
 		for _, raw := range batch {
 			l := log.WithField("subject", raw.Subject)
 			m := new(metrics.RawMetric)
@@ -109,19 +111,22 @@ func buildHandler(c client.Client, db string) messaging.BatchHandler {
 			bp.AddPoint(pt)
 			parseSuccess++
 		}
-		parseDur := time.Since(start)
+		parseDur, _ := parsingTimer.Stop(nil)
 
 		log.WithFields(logrus.Fields{
 			"incoming_batch_size": parseFailed + parseSuccess,
 			"failed_parsing":      parseFailed,
 			"outgoing_batch_size": len(bp.Points()),
 		}).Debug("Parsed batch, sending it to influx")
-		writeStart := time.Now()
-		if err := c.Write(bp); err != nil {
+		metrics.NewCounter("doppler.influx.incoming_batch_size", nil).CountN(int64(parseFailed+parseSuccess), nil)
+		metrics.NewCounter("doppler.influx.outgoing_batch_size", nil).CountN(int64(len(bp.Points())), nil)
+		writeDur, err := metrics.TimeBlockErr("doppler.influx.batch_write_dur", nil, func() error {
+			return c.Write(bp)
+		})
+		if err != nil {
 			log.WithError(err).Warn("Failed to write batch to influx")
 		}
-		writeDur := time.Since(writeStart)
-		dur := time.Since(start)
+		dur, _ := timer.Stop(nil)
 
 		log.WithFields(logrus.Fields{
 			"parsing_dur": parseDur.Nanoseconds(),

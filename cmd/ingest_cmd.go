@@ -6,11 +6,15 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/spf13/cobra"
 
+	"os"
+
 	"github.com/nats-io/nats"
 	"github.com/rybit/doppler/influx"
 	"github.com/rybit/doppler/messaging"
 	"github.com/rybit/doppler/redshift"
 	"github.com/rybit/doppler/scalyr"
+	"github.com/rybit/nats_logrus_hook"
+	"github.com/rybit/nats_metrics"
 )
 
 var ingestCmd = &cobra.Command{
@@ -18,23 +22,41 @@ var ingestCmd = &cobra.Command{
 	Run: ingest,
 }
 
-func ingest(cmd *cobra.Command, args []string) {
+func ingest(cmd *cobra.Command, _ []string) {
 	config, log := start(cmd)
 	log = log.WithField("version", Version)
 	log.Info("Configured - starting to connect and consume")
 
+	fields := logrus.Fields{
+		"servers": config.NatsConf.Servers,
+	}
+	if config.NatsConf.TLSConfig != nil {
+		fields["ca_files"] = config.NatsConf.TLSConfig.CAFiles
+		fields["key_file"] = config.NatsConf.TLSConfig.KeyFile
+		fields["cert_file"] = config.NatsConf.TLSConfig.CertFile
+	}
 	// connect to NATS
-	log.WithFields(logrus.Fields{
-		"servers":   config.NatsConf.Servers,
-		"ca_files":  config.NatsConf.CAFiles,
-		"key_file":  config.NatsConf.KeyFile,
-		"cert_file": config.NatsConf.CertFile,
-	}).Info("Connecting to Nats")
+	log.WithFields(fields).Info("Connecting to Nats")
 	nc, err := messaging.ConnectToNats(&config.NatsConf, messaging.ErrorHandler(log))
 	if err != nil {
 		log.WithError(err).Fatal("Failed to connect to nats")
 	}
 
+	if config.NatsConf.LogsSubject != "" {
+		logrus.AddHook(nhook.NewNatsHook(nc, config.NatsConf.LogsSubject))
+	}
+
+	if config.NatsConf.MetricsSubject != "" {
+		metrics.Init(nc, config.NatsConf.MetricsSubject)
+		h, err := os.Hostname()
+		if err != nil {
+			log.WithError(err).Fatal("Failed to get host for metrics dimension")
+		}
+		metrics.AddDimension("hostname", h)
+	} else {
+		metrics.Init(nil, "")
+	}
+	messaging.StartReporting(config.ReportSec, log.WithField("reporting", true))
 	wg := new(sync.WaitGroup)
 	startRedshiftConsumers(wg, nc, log, config.RedshiftConf)
 	startScalyrConsumers(wg, nc, log, config.ScalyrConf)
@@ -44,6 +66,7 @@ func ingest(cmd *cobra.Command, args []string) {
 	wg.Wait()
 	log.Info("All consumers stopped - shutting down")
 }
+
 
 func startRedshiftConsumers(wg *sync.WaitGroup, nc *nats.Conn, log *logrus.Entry, config *redshift.Config) {
 	if config == nil {

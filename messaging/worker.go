@@ -61,7 +61,8 @@ func BuildBatchingWorkerPool(shared chan *nats.Msg, poolSize, batchSize, timeout
 
 type BatchHandler func(batch map[time.Time]*nats.Msg, log *logrus.Entry)
 
-var inflight int32
+var inflightBatches int64
+var sentBatches int64
 
 func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h BatchHandler) (chan<- (*nats.Msg), chan<- bool) {
 	batchLock := new(sync.Mutex)
@@ -72,7 +73,7 @@ func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h Bat
 
 	wrapped := func(batch map[time.Time]*nats.Msg, log *logrus.Entry) {
 		start := time.Now()
-		flying := atomic.AddInt32(&inflight, 1)
+		flying := atomic.AddInt64(&inflightBatches, 1)
 		l := log.WithFields(logrus.Fields{
 			"batch_id": start.Nanosecond(),
 		})
@@ -80,7 +81,8 @@ func StartBatcher(timeout time.Duration, batchSize int, log *logrus.Entry, h Bat
 
 		h(batch, l)
 
-		flying = atomic.AddInt32(&inflight, -1)
+		flying = atomic.AddInt64(&inflightBatches, -1)
+		atomic.AddInt64(&sentBatches, 1)
 		dur := time.Since(start)
 		l.WithFields(logrus.Fields{
 			"dur":              dur.Nanoseconds(),
