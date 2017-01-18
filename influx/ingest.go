@@ -124,6 +124,7 @@ func buildHandler(c client.Client, db string) messaging.BatchHandler {
 			return c.Write(bp)
 		})
 		if err != nil {
+			metrics.Count("doppler.influx.failed_batch", nil)
 			log.WithError(err).Warn("Failed to write batch to influx")
 		}
 		dur, _ := timer.Stop(nil)

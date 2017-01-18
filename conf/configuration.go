@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/rybit/doppler/influx"
+	"github.com/rybit/doppler/kairos"
 	"github.com/rybit/doppler/messaging"
 	"github.com/rybit/doppler/redshift"
 	"github.com/rybit/doppler/scalyr"
@@ -21,6 +22,7 @@ type Config struct {
 	ScalyrConf   *scalyr.Config   `mapstructure:"scalyr_conf"`
 	RedshiftConf *redshift.Config `mapstructure:"redshift_conf"`
 	InfluxConf   *influx.Config   `mapstructure:"influx_conf"`
+	KairosConf   *kairos.Config   `mapstructure:"kairos_conf"`
 }
 
 // LoadConfig loads the config from a file if specified, otherwise from the environment
