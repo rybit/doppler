@@ -9,11 +9,10 @@
     "log_level": "debug",
     "log_file": ""
   },
-  "influx_conf": {
-	  "addr": "http://influx.lo:8086",
+  "kairos_conf": {
+	  "addr": "http://kairos.lo:8080",
+    "timeout_sec": 10,
     "metrics_conf": {
-      "db": "metrics",
-      "connection_timeout": 100,
       "batch_size": 1000,
       "batch_timeout": 10,
       "buffer_size": 1000,

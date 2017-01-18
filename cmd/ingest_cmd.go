@@ -10,6 +10,7 @@ import (
 
 	"github.com/nats-io/nats"
 	"github.com/rybit/doppler/influx"
+	"github.com/rybit/doppler/kairos"
 	"github.com/rybit/doppler/messaging"
 	"github.com/rybit/doppler/redshift"
 	"github.com/rybit/doppler/scalyr"
@@ -54,19 +55,19 @@ func ingest(cmd *cobra.Command, _ []string) {
 		}
 		metrics.AddDimension("hostname", h)
 	} else {
-		metrics.Init(nil, "")
+		metrics.Init(nil, "nowhere")
 	}
 	messaging.StartReporting(config.ReportSec, log.WithField("reporting", true))
 	wg := new(sync.WaitGroup)
 	startRedshiftConsumers(wg, nc, log, config.RedshiftConf)
 	startScalyrConsumers(wg, nc, log, config.ScalyrConf)
 	startInfluxConsumers(wg, nc, log, config.InfluxConf)
+	startKairosConsumers(wg, nc, log, config.KairosConf)
 
 	log.Info("Consumers started")
 	wg.Wait()
 	log.Info("All consumers stopped - shutting down")
 }
-
 
 func startRedshiftConsumers(wg *sync.WaitGroup, nc *nats.Conn, log *logrus.Entry, config *redshift.Config) {
 	if config == nil {
@@ -109,35 +110,63 @@ func startScalyrConsumers(wg *sync.WaitGroup, nc *nats.Conn, log *logrus.Entry, 
 		return
 	}
 
-	log = log.WithField("destination", "scalyr")
+	log = log.WithFields(logrus.Fields{
+		"destination": "scalyr",
+		"origin":      "logs",
+	})
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		l := log.WithField("origin", "logs")
-		err := scalyr.ProcessLines(nc, l, config)
+		err := scalyr.ProcessLines(nc, log, config)
 		if err != nil {
-			l.WithError(err).Warn("Error while processing logs")
+			log.WithError(err).Warn("Error while processing logs")
 		} else {
-			l.Info("Shutdown processing logs")
+			log.Info("Shutdown processing logs")
+		}
+	}()
+}
+
+func startKairosConsumers(wg *sync.WaitGroup, nc *nats.Conn, log *logrus.Entry, config *kairos.Config) {
+	if config == nil {
+		return
+	}
+
+	log = log.WithFields(logrus.Fields{
+		"origin":      "metrics",
+		"destination": "kairos",
+	})
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		err := kairos.ProcessMetrics(nc, log, config)
+		if err != nil {
+			log.WithError(err).Warn("Error while processing logs")
+		} else {
+			log.Info("Shutdown processing logs")
 		}
 	}()
 }
 
 func startInfluxConsumers(wg *sync.WaitGroup, nc *nats.Conn, log *logrus.Entry, config *influx.Config) {
-	if config == nil && config.MetricsConf != nil {
+	if config == nil || config.MetricsConf == nil {
 		return
 	}
 
-	log = log.WithField("destination", "influx")
+	log = log.WithFields(logrus.Fields{
+		"destination": "influx",
+		"origin":      "metrics",
+	})
+
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		l := log.WithField("origin", "metrics")
-		err := influx.ProcessMetrics(nc, l, config)
+		err := influx.ProcessMetrics(nc, log, config)
 		if err != nil {
-			l.WithError(err).Warn("Error while processing logs")
+			log.WithError(err).Warn("Error while processing logs")
 		} else {
-			l.Info("Shutdown processing logs")
+			log.Info("Shutdown processing logs")
 		}
 	}()
 }
