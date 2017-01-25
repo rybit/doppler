@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"strings"
+
+	"reflect"
+
 	"github.com/Sirupsen/logrus"
 	"github.com/nats-io/nats"
 	"github.com/rybit/doppler/messaging"
@@ -65,11 +69,18 @@ func buildHandler(client *HTTPClient, config *messaging.IngestConfig) messaging.
 				}
 
 				for k, v := range incomingMetric.Dims {
-					switch t := v.(type) {
-					case string, int, int32, int64, bool:
+					switch v.(type) {
+					case string:
+						s := strings.TrimSpace(v.(string))
+						if s == "" {
+							l.WithField("dimension", k).Debugf("Skipping dimension %s because it is an empty string", k)
+						} else {
+							outMetric.Tags[k] = v
+						}
+					case int, int32, int64, float32, float64, bool:
 						outMetric.Tags[k] = v
 					default:
-						l.Warnf("Skipping dimension %s because it is a %v", k, t)
+						l.WithField("dimension", k).Warnf("Skipping dimension %s because it is a %s", k, reflect.TypeOf(v))
 					}
 				}
 				parseSuccess++
