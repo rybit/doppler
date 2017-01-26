@@ -16,6 +16,8 @@ import (
 	"github.com/rybit/nats_metrics"
 )
 
+const nanoInMilli int64 = 1000000
+
 func ProcessMetrics(nc *nats.Conn, log *logrus.Entry, config *Config) error {
 	if config.MetricsConf == nil {
 		return errors.New("Must provide a metrics configuration")
@@ -64,7 +66,7 @@ func buildHandler(client *HTTPClient, config *messaging.IngestConfig) messaging.
 					Value: incomingMetric.Value,
 					Name:  incomingMetric.Name,
 					// kairos takes milliseconds since epoch
-					Timestamp: incomingMetric.Timestamp.UnixNano() / int64(1000),
+					Timestamp: incomingMetric.Timestamp.UnixNano() / nanoInMilli,
 					Tags:      make(map[string]interface{}),
 				}
 
