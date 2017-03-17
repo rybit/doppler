@@ -74,7 +74,7 @@ func (client HTTPClient) AddPoints(points []Point) error {
 
 	rsp, err := client.client.Do(req)
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if rsp.StatusCode >= 300 {
