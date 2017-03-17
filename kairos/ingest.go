@@ -50,10 +50,12 @@ func buildHandler(client *HTTPClient, config *messaging.IngestConfig) messaging.
 		})
 
 		payload := []Point{}
-		parseFailed := 0
-		parseSuccess := 0
+		var parseFailed int64
+		var missingDims int64
+		var metricsSeen int64
 		parsingDur := metrics.TimeBlock("doppler.kairos.parsing_dur", nil, func() {
 			for _, raw := range batch {
+
 				l := log.WithField("subject", raw.Subject)
 				incomingMetric := new(metrics.RawMetric)
 				if err := json.Unmarshal(raw.Data, incomingMetric); err != nil {
@@ -61,6 +63,13 @@ func buildHandler(client *HTTPClient, config *messaging.IngestConfig) messaging.
 					parseFailed++
 					continue
 				}
+
+				if len(incomingMetric.Dims) == 0 {
+					l.Warnf("Skipping metric '%s' because it doesn't have any dimensions and kairos would reject it", incomingMetric.Name)
+					missingDims++
+					continue
+				}
+
 				l = l.WithField("metric_name", incomingMetric.Name)
 				outMetric := Point{
 					Value: incomingMetric.Value,
@@ -85,7 +94,6 @@ func buildHandler(client *HTTPClient, config *messaging.IngestConfig) messaging.
 						l.WithField("dimension", k).Warnf("Skipping dimension %s because it is a %s", k, reflect.TypeOf(v))
 					}
 				}
-				parseSuccess++
 				payload = append(payload, outMetric)
 			}
 		})
@@ -93,8 +101,14 @@ func buildHandler(client *HTTPClient, config *messaging.IngestConfig) messaging.
 		log.WithFields(logrus.Fields{
 			"parsing_dur": parsingDur.Nanoseconds(),
 		}).Debug("Parsed batch, sending it to kairos")
-		metrics.NewCounter("doppler.kairos.incoming_batch_size", nil).CountN(int64(parseFailed+parseSuccess), nil)
+		metrics.NewCounter("doppler.kairos.incoming_batch_size", nil).CountN(metricsSeen, nil)
 		metrics.NewCounter("doppler.kairos.outgoing_batch_size", nil).CountN(int64(len(payload)), nil)
+		if missingDims > 0 {
+			metrics.NewCounter("doppler.kairos.missing_dims_size", nil).CountN(missingDims, nil)
+		}
+		if parseFailed > 0 {
+			metrics.NewCounter("doppler.kairos.failed_parsing_size", nil).CountN(parseFailed, nil)
+		}
 
 		writeDur, err := metrics.TimeBlockErr("doppler.kairos.write_dur", nil, func() error {
 			return client.AddPoints(payload)
@@ -108,8 +122,9 @@ func buildHandler(client *HTTPClient, config *messaging.IngestConfig) messaging.
 
 		batchDur, _ := batchTimer.Stop(nil)
 		log.WithFields(logrus.Fields{
-			"incoming_batch_size": parseFailed + parseSuccess,
+			"incoming_batch_size": metricsSeen,
 			"failed_parsing":      parseFailed,
+			"missing_dims":        missingDims,
 			"outgoing_batch_size": len(payload),
 			"parsing_dur":         parsingDur.Nanoseconds(),
 			"write_dur":           writeDur.Nanoseconds(),
